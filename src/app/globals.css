@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fff7ec;
+  --foreground: #21153b;
+  --surface: #fff2df;
+  --card: #fffdf8;
+  --line: rgba(33, 21, 59, 0.1);
+  --muted-foreground: #65577d;
+  --accent: #ff6b35;
+  --accent-strong: #f6b73c;
+  --accent-soft: rgba(255, 107, 53, 0.12);
+  --cool: #0ea5e9;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-line: var(--line);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-cool: var(--cool);
+  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+}
+
+html {
+  background:
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.12), transparent 28%),
+    radial-gradient(circle at top left, rgba(255, 183, 60, 0.18), transparent 32%),
+    linear-gradient(180deg, #fff9ef, #fff2dd 48%, #fff7ec);
+}
+
+body {
+  color: var(--foreground);
+  background: transparent;
+}
+
+.panel-glow {
+  position: relative;
+}
+
+.panel-glow::after {
+  position: absolute;
+  inset: -20% auto auto 65%;
+  height: 9rem;
+  width: 9rem;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 196, 86, 0.32), transparent 70%);
+  content: "";
+  pointer-events: none;
+}
