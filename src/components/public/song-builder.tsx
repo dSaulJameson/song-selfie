@@ -11,13 +11,12 @@ import {
   WandSparkles,
 } from "lucide-react";
 import Link from "next/link";
-import { startTransition, useDeferredValue, useState, useTransition } from "react";
+import { startTransition, useState, useTransition } from "react";
 
 import type {
   FormField,
   getFineTuneCapabilities,
 } from "@/lib/finetune-capabilities";
-import { buildPromptPackage } from "@/lib/prompt-builder";
 import type { SongRequestInput } from "@/lib/schema";
 import { cn } from "@/lib/utils";
 import { Button } from "@/src/components/ui/button";
@@ -74,15 +73,6 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
   const [error, setError] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isPending, startSubmit] = useTransition();
-  const deferredStory = useDeferredValue(form.story);
-
-  const preview = buildPromptPackage(
-    {
-      ...form,
-      story: deferredStory,
-    },
-    { venueName: venue.name },
-  );
 
   const namesField = getField(capabilities, "names");
   const emailField = getField(capabilities, "email");
@@ -185,8 +175,8 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
           </div>
         </div>
 
-        <div className="grid gap-8 px-5 py-6 sm:px-8 sm:py-8 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="space-y-8">
+        <div className="px-5 py-6 sm:px-8 sm:py-8">
+          <div className="mx-auto max-w-5xl space-y-8">
             <section className="grid gap-4 md:grid-cols-2">
               {namesField ? (
                 <label className="space-y-3">
@@ -724,49 +714,6 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
                 ))}
               </div>
             </section>
-          </div>
-
-          <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
-            <div className="overflow-hidden rounded-[1.8rem] border border-white/10 bg-[linear-gradient(180deg,#18122c,#261a46)] p-5 text-white shadow-[0_24px_70px_rgba(17,11,30,0.45)]">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-white/60">
-                    AI preview
-                  </p>
-                  <h2 className="mt-2 text-2xl font-black">How your song lands</h2>
-                </div>
-                <div className="rounded-full bg-white/10 p-3">
-                  <Music4 className="h-5 w-5" />
-                </div>
-              </div>
-
-              <div className="mt-5 rounded-[1.3rem] bg-white/8 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/55">
-                  Prompt
-                </p>
-                <p className="mt-3 text-sm leading-7 text-white/90">
-                  {preview.naturalPrompt}
-                </p>
-              </div>
-
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                <div className="rounded-[1.2rem] bg-white/8 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/55">
-                    FineTune tags
-                  </p>
-                  <p className="mt-3 text-sm leading-6 text-white/85">{preview.tags}</p>
-                </div>
-                <div className="rounded-[1.2rem] bg-white/8 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/55">
-                    Live generation
-                  </p>
-                  <p className="mt-3 text-sm leading-6 text-white/85">
-                    Max 10 concurrent generations. Duration set to {form.duration}s.
-                  </p>
-                </div>
-              </div>
-            </div>
-
             <div className="rounded-[1.6rem] border border-slate-200 bg-white/90 p-4 shadow-[0_14px_26px_rgba(15,23,42,0.08)]">
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-violet-600">
                 Venue tools
@@ -782,7 +729,7 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
                 Venue/Admin sign in
               </Link>
             </div>
-          </aside>
+          </div>
         </div>
       </div>
     </section>
