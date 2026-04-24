@@ -86,7 +86,7 @@ function buildSubject(names: string[]) {
 
 function getDurationGuidance(duration: number) {
   if (duration <= 30) {
-    return "Keep it tight: one fast intro, one verse, one chorus, and a quick outro.";
+    return "Keep it tight: hook fast, one short verse, one chorus, and a quick outro.";
   }
 
   if (duration <= 60) {
@@ -98,6 +98,14 @@ function getDurationGuidance(duration: number) {
   }
 
   return "Use a full-length arrangement with intro, two verses, repeated chorus, bridge, final chorus, and outro.";
+}
+
+export function getLyricCharacterBudget(duration: number) {
+  return Math.max(260, Math.min(1800, Math.round(duration * 13.5)));
+}
+
+export function getLyricLineBudget(duration: number) {
+  return Math.max(6, Math.min(28, Math.round(duration / 4)));
 }
 
 export function isExplicitSongRequest(input: SongRequestInput) {
@@ -178,6 +186,7 @@ export function buildPromptPackage(
     input.lyrics
       ? `Use this user-provided lyric seed when helpful: ${input.lyrics.trim()}`
       : "No user-written lyric seed was supplied.",
+    `Keep the finished lyric body under roughly ${getLyricCharacterBudget(input.duration)} characters and around ${getLyricLineBudget(input.duration)} non-empty lines so it fits the requested runtime.`,
     "Return plain text lyrics only with bracketed section headers like [Verse 1] and [Chorus].",
   ].join(" ");
 

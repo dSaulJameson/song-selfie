@@ -1,7 +1,11 @@
 import { z } from "zod";
 
 import { getBaseUrl, getOpenRouterConfig } from "@/lib/env";
-import { buildPromptPackage } from "@/lib/prompt-builder";
+import {
+  buildPromptPackage,
+  getLyricCharacterBudget,
+  getLyricLineBudget,
+} from "@/lib/prompt-builder";
 import type { SongRequestInput } from "@/lib/schema";
 import { safeJsonParse } from "@/lib/utils";
 
@@ -37,24 +41,33 @@ function limitText(value: string, maxLength: number) {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength - 3)}...`;
 }
 
-function normalizeLyrics(value: string) {
+function normalizeLyrics(value: string, maxCharacters: number, maxLines: number) {
   const normalized = value.replace(/\r\n/g, "\n").trim();
-  if (normalized.length <= 2000) {
-    return normalized;
-  }
+  const lines = normalized
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter(Boolean);
 
-  const lines = normalized.split("\n");
-  let result = "";
-
+  let resultLines: string[] = [];
   for (const line of lines) {
-    const next = result ? `${result}\n${line}` : line;
-    if (next.length > 2000) {
+    if (resultLines.length >= maxLines) {
       break;
     }
-    result = next;
+
+    const nextCandidate = [...resultLines, line].join("\n");
+    if (nextCandidate.length > maxCharacters) {
+      break;
+    }
+
+    resultLines = [...resultLines, line];
   }
 
-  return result || normalized.slice(0, 2000).trim();
+  const result = resultLines.join("\n").trim();
+  if (result) {
+    return result;
+  }
+
+  return normalized.slice(0, maxCharacters).trim();
 }
 
 function extractJsonObject(value: string) {
@@ -92,6 +105,8 @@ export function buildFallbackSongPacket(
   context?: { venueName?: string },
 ): GeneratedSongPacket {
   const promptPackage = buildPromptPackage(input, context);
+  const lyricCharacterBudget = getLyricCharacterBudget(input.duration);
+  const lyricLineBudget = getLyricLineBudget(input.duration);
 
   return {
     title: promptPackage.title,
@@ -100,11 +115,17 @@ export function buildFallbackSongPacket(
     lyrics: normalizeLyrics(
       promptPackage.lyrics ||
         [
+          "[Hook]",
+          `Tonight belongs to ${promptPackage.subject}.`,
           "[Verse 1]",
           `${promptPackage.subject} is in the spotlight tonight.`,
           "[Chorus]",
           `Raise it up for ${promptPackage.subject}.`,
+          "[Outro]",
+          "One more chorus and fade.",
         ].join("\n"),
+      lyricCharacterBudget,
+      lyricLineBudget,
     ),
     contentProfile: promptPackage.explicit ? "mature" : "safe",
     model: "fallback",
@@ -120,6 +141,8 @@ export async function generateSongPacket(
   const promptPackage = buildPromptPackage(input, context);
   const config = getOpenRouterConfig();
   const selectedModel = promptPackage.explicit ? config.explicitModel : config.safeModel;
+  const lyricCharacterBudget = getLyricCharacterBudget(input.duration);
+  const lyricLineBudget = getLyricLineBudget(input.duration);
 
   const response = await fetch(`${config.baseUrl}/chat/completions`, {
     method: "POST",
@@ -153,6 +176,8 @@ export async function generateSongPacket(
             key: input.key,
             scale: input.scale,
             timeSignature: input.timesignature,
+            lyricCharacterBudget,
+            lyricLineBudget,
             modelRouting: promptPackage.explicit ? "mature_or_explicit" : "standard",
             prompt: promptPackage.naturalPrompt,
             lyricBrief: promptPackage.lyricBrief,
@@ -184,7 +209,7 @@ export async function generateSongPacket(
     title: limitText(songPacket.title, 80),
     naturalPrompt: promptPackage.naturalPrompt,
     tags: limitText(songPacket.tags, 500),
-    lyrics: normalizeLyrics(songPacket.lyrics),
+    lyrics: normalizeLyrics(songPacket.lyrics, lyricCharacterBudget, lyricLineBudget),
     contentProfile: songPacket.contentProfile ?? (promptPackage.explicit ? "mature" : "safe"),
     model: payload.model || selectedModel,
     usedFallback: false,
