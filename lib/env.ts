@@ -58,6 +58,16 @@ export function getFineTuneConfig() {
   };
 }
 
+export function getOpenRouterConfig() {
+  return {
+    apiKey: requireEnv("OPENROUTER_API_KEY"),
+    baseUrl: getFirstEnv("OPENROUTER_BASE_URL") ?? "https://openrouter.ai/api/v1",
+    appName: getFirstEnv("OPENROUTER_APP_NAME") ?? "Song Selfie",
+    safeModel: getFirstEnv("OPENROUTER_SAFE_MODEL") ?? "openai/gpt-4o",
+    explicitModel: getFirstEnv("OPENROUTER_EXPLICIT_MODEL") ?? "x-ai/grok-3-mini",
+  };
+}
+
 export function getStripeConfig() {
   return {
     secretKey: requireEnv("STRIPE_SECRET_KEY"),

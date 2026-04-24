@@ -11,6 +11,7 @@ import {
   updateOrderGenerationState,
 } from "@/lib/db";
 import { createFineTuneGeneration, waitForFineTuneCompletion } from "@/lib/finetune";
+import { buildFallbackSongPacket, generateSongPacket } from "@/lib/openrouter";
 import { buildPromptPackage } from "@/lib/prompt-builder";
 import { songRequestSchema } from "@/lib/schema";
 import { uploadSongToS3 } from "@/lib/s3";
@@ -18,6 +19,14 @@ import { sendSongReadyEmails } from "@/lib/ses";
 
 const QUEUE_LOCK_ID = 41022;
 const MAX_CONCURRENT_GENERATIONS = 10;
+
+const FINETUNE_KEY_MAP: Record<string, string> = {
+  Db: "C#",
+  Eb: "D#",
+  Gb: "F#",
+  Ab: "G#",
+  Bb: "A#",
+};
 
 async function processOrder(orderId: string) {
   const order = await getOrderById(orderId);
@@ -34,13 +43,25 @@ async function processOrder(orderId: string) {
   try {
     const input = songRequestSchema.parse(order.rawInputs);
     const promptPackage = buildPromptPackage(input, { venueName: venue.name });
+    let songPacket = buildFallbackSongPacket(input, { venueName: venue.name });
+
+    try {
+      songPacket = await generateSongPacket(input, { venueName: venue.name });
+    } catch (error) {
+      console.error("OpenRouter lyric generation failed, using fallback packet", {
+        orderId,
+        message: error instanceof Error ? error.message : "Unknown OpenRouter error",
+      });
+    }
+
     const generationPayload = {
-      tags: promptPackage.tags,
-      lyrics: promptPackage.lyrics,
+      tags: songPacket.tags,
+      lyrics: songPacket.lyrics || promptPackage.lyrics,
       duration: input.duration,
       bpm: input.bpm ?? undefined,
       language: input.language,
-      key: input.key === "auto" ? undefined : input.key,
+      key:
+        input.key === "auto" ? undefined : (FINETUNE_KEY_MAP[input.key] ?? input.key),
       scale: input.scale === "auto" ? undefined : input.scale,
       timesignature: input.timesignature,
       seed: input.seed ?? undefined,
@@ -50,9 +71,16 @@ async function processOrder(orderId: string) {
 
     await updateOrderGenerationState({
       orderId,
-      generatedPrompt: promptPackage.naturalPrompt,
+      generatedPrompt: songPacket.naturalPrompt,
       finetuneGenerationId: generation.id,
-      finetuneRequest: generationPayload,
+      finetuneRequest: {
+        ...generationPayload,
+        openrouterModel: songPacket.model,
+        openrouterUsedFallback: songPacket.usedFallback,
+        openrouterContentProfile: songPacket.contentProfile,
+        openrouterExplicitRoute: songPacket.explicit,
+        fallbackPrompt: promptPackage.naturalPrompt,
+      },
     });
 
     const completedGeneration = await waitForFineTuneCompletion(generation.id);
@@ -98,7 +126,7 @@ async function processOrder(orderId: string) {
         venueEmail: venue.contactEmail,
         venueName: venue.name,
         songUrl,
-        prompt: promptPackage.naturalPrompt,
+        prompt: songPacket.naturalPrompt,
         names: input.names,
       });
 
