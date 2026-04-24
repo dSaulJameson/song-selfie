@@ -1,57 +1,110 @@
-import {
-  ListIdentitiesCommand,
-  SendEmailCommand,
-  SESClient,
-} from "@aws-sdk/client-ses";
+import https from "node:https";
+
+import { Hash } from "@smithy/hash-node";
+import { HttpRequest } from "@smithy/protocol-http";
+import { SignatureV4 } from "@smithy/signature-v4";
 
 import { getSesConfig } from "@/lib/env";
 
-let sesClient: SESClient | null = null;
-let discoveredFromEmail: Promise<string> | null = null;
-
-function getSesClient() {
-  if (!sesClient) {
-    const config = getSesConfig();
-    sesClient = new SESClient({
-      region: config.region,
-      credentials: {
-        accessKeyId: config.accessKeyId,
-        secretAccessKey: config.secretAccessKey,
-      },
-    });
+function getSesFromEmail() {
+  const config = getSesConfig();
+  if (!config.fromEmail) {
+    throw new Error(
+      "SES_FROM_EMAIL must be configured with a verified SES sender address.",
+    );
   }
 
-  return sesClient;
+  return config.fromEmail;
 }
 
-async function getSesFromEmail() {
+async function sendRawSesEmail(params: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}) {
   const config = getSesConfig();
-  if (config.fromEmail) {
-    return config.fromEmail;
+  const host = `email.${config.region}.amazonaws.com`;
+  const body = new URLSearchParams({
+    Action: "SendEmail",
+    Version: "2010-12-01",
+    Source: getSesFromEmail(),
+    "Destination.ToAddresses.member.1": params.to,
+    "Message.Subject.Charset": "UTF-8",
+    "Message.Subject.Data": params.subject,
+    "Message.Body.Html.Charset": "UTF-8",
+    "Message.Body.Html.Data": params.html,
+    "Message.Body.Text.Charset": "UTF-8",
+    "Message.Body.Text.Data": params.text,
+  });
+
+  if (config.configurationSetName) {
+    body.set("ConfigurationSetName", config.configurationSetName);
   }
 
-  if (!discoveredFromEmail) {
-    discoveredFromEmail = (async () => {
-      const client = getSesClient();
-      const response = await client.send(
-        new ListIdentitiesCommand({
-          IdentityType: "EmailAddress",
-          MaxItems: 25,
-        }),
+  const signer = new SignatureV4({
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+    region: config.region,
+    service: "ses",
+    sha256: Hash.bind(null, "sha256"),
+  });
+
+  const request = new HttpRequest({
+    protocol: "https:",
+    hostname: host,
+    method: "POST",
+    path: "/",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded; charset=utf-8",
+      host,
+    },
+    body: body.toString(),
+  });
+
+  const signedRequest = await signer.sign(request);
+
+  const response = await new Promise<{ statusCode: number; body: string }>(
+    (resolve, reject) => {
+      const outgoing = https.request(
+        {
+          hostname: host,
+          method: signedRequest.method,
+          path: signedRequest.path,
+          headers: signedRequest.headers,
+        },
+        (incoming) => {
+          let responseBody = "";
+          incoming.setEncoding("utf8");
+          incoming.on("data", (chunk) => {
+            responseBody += chunk;
+          });
+          incoming.on("end", () => {
+            resolve({
+              statusCode: incoming.statusCode ?? 500,
+              body: responseBody,
+            });
+          });
+        },
       );
 
-      const identity = response.Identities?.find(Boolean);
-      if (!identity) {
-        throw new Error(
-          "SES_FROM_EMAIL is missing and no verified SES email identities were found.",
-        );
-      }
+      outgoing.on("error", reject);
+      outgoing.write(body.toString());
+      outgoing.end();
+    },
+  );
 
-      return identity;
-    })();
+  if (response.statusCode >= 400) {
+    const messageMatch = response.body.match(/<Message>([\s\S]*?)<\/Message>/);
+    const message = messageMatch?.[1]
+      ?.replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&");
+
+    throw new Error(message ?? `SES email failed with status ${response.statusCode}.`);
   }
-
-  return discoveredFromEmail;
 }
 
 export async function sendSongReadyEmails(params: {
@@ -62,9 +115,6 @@ export async function sendSongReadyEmails(params: {
   prompt: string;
   names: string;
 }) {
-  const client = getSesClient();
-  const fromEmail = await getSesFromEmail();
-
   const emails = [
     {
       to: params.customerEmail,
@@ -82,33 +132,19 @@ export async function sendSongReadyEmails(params: {
 
   await Promise.all(
     emails.map((email) =>
-      client.send(
-        new SendEmailCommand({
-          Source: fromEmail,
-          Destination: {
-            ToAddresses: [email.to],
-          },
-          Message: {
-            Subject: {
-              Charset: "UTF-8",
-              Data: email.subject,
-            },
-            Body: {
-              Html: {
-                Charset: "UTF-8",
-                Data: `
-                  <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #201733;">
-                    <h1 style="margin-bottom: 12px;">${email.heading}</h1>
-                    <p>${email.copy}</p>
-                    <p><strong>Prompt:</strong> ${params.prompt}</p>
-                    <p><a href="${params.songUrl}" style="display: inline-block; padding: 12px 18px; background: #ff6b35; color: white; border-radius: 999px; text-decoration: none;">Listen now</a></p>
-                  </div>
-                `,
-              },
-            },
-          },
-        }),
-      ),
+      sendRawSesEmail({
+        to: email.to,
+        subject: email.subject,
+        html: `
+          <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #201733;">
+            <h1 style="margin-bottom: 12px;">${email.heading}</h1>
+            <p>${email.copy}</p>
+            <p><strong>Prompt:</strong> ${params.prompt}</p>
+            <p><a href="${params.songUrl}" style="display: inline-block; padding: 12px 18px; background: #ff6b35; color: white; border-radius: 999px; text-decoration: none;">Listen now</a></p>
+          </div>
+        `,
+        text: `${email.heading}\n\n${email.copy}\n\nPrompt: ${params.prompt}\n\nListen now: ${params.songUrl}`,
+      }),
     ),
   );
 }
