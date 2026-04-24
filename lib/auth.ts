@@ -1,9 +1,14 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 
+import { hasClerkServerKeys } from "@/lib/clerk";
 import { getAdminEmails } from "@/lib/env";
 
 export async function requireSignedInUser() {
+  if (!hasClerkServerKeys()) {
+    redirect("/sign-in");
+  }
+
   const session = await auth();
 
   if (!session.userId) {

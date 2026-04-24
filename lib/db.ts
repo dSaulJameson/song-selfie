@@ -47,6 +47,44 @@ export type SongOrderRecord = {
 let sqlClient: postgres.Sql | null = null;
 let databaseReady: Promise<void> | null = null;
 
+function parseJsonField<T>(value: T | string | null | undefined, fallback: T) {
+  if (typeof value !== "string") {
+    return (value ?? fallback) as T;
+  }
+
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeOrderRecord(record: SongOrderRecord) {
+  return {
+    ...record,
+    rawInputs: parseJsonField<SongRequestInput>(
+      record.rawInputs,
+      record.rawInputs as SongRequestInput,
+    ),
+    finetuneRequest: parseJsonField<Record<string, unknown> | null>(
+      record.finetuneRequest,
+      record.finetuneRequest ?? null,
+    ),
+    finetuneResponse: parseJsonField<Record<string, unknown> | null>(
+      record.finetuneResponse,
+      record.finetuneResponse ?? null,
+    ),
+    metadata: parseJsonField<Record<string, unknown> | null>(
+      record.metadata,
+      record.metadata ?? null,
+    ),
+  } satisfies SongOrderRecord;
+}
+
+function normalizeOrderRecords(records: SongOrderRecord[]) {
+  return records.map(normalizeOrderRecord);
+}
+
 function getSql() {
   if (!sqlClient) {
     sqlClient = postgres(getDatabaseUrl(), {
@@ -77,29 +115,31 @@ function mapVenueColumns() {
   `;
 }
 
-function mapOrderColumns() {
+function mapOrderColumns(tableAlias?: string) {
+  const prefix = tableAlias ? `${tableAlias}.` : "";
+
   return `
-    id,
-    venue_id as "venueId",
-    checkout_session_id as "checkoutSessionId",
-    payment_intent_id as "paymentIntentId",
-    customer_email as "customerEmail",
-    status,
-    amount_total as "amountTotal",
-    currency,
-    raw_inputs as "rawInputs",
-    generated_prompt as "generatedPrompt",
-    finetune_generation_id as "finetuneGenerationId",
-    finetune_request as "finetuneRequest",
-    finetune_response as "finetuneResponse",
-    metadata,
-    song_url as "songUrl",
-    s3_key as "s3Key",
-    error_message as "errorMessage",
-    created_at as "createdAt",
-    updated_at as "updatedAt",
-    completed_at as "completedAt",
-    emailed_at as "emailedAt"
+    ${prefix}id,
+    ${prefix}venue_id as "venueId",
+    ${prefix}checkout_session_id as "checkoutSessionId",
+    ${prefix}payment_intent_id as "paymentIntentId",
+    ${prefix}customer_email as "customerEmail",
+    ${prefix}status,
+    ${prefix}amount_total as "amountTotal",
+    ${prefix}currency,
+    ${prefix}raw_inputs as "rawInputs",
+    ${prefix}generated_prompt as "generatedPrompt",
+    ${prefix}finetune_generation_id as "finetuneGenerationId",
+    ${prefix}finetune_request as "finetuneRequest",
+    ${prefix}finetune_response as "finetuneResponse",
+    ${prefix}metadata,
+    ${prefix}song_url as "songUrl",
+    ${prefix}s3_key as "s3Key",
+    ${prefix}error_message as "errorMessage",
+    ${prefix}created_at as "createdAt",
+    ${prefix}updated_at as "updatedAt",
+    ${prefix}completed_at as "completedAt",
+    ${prefix}emailed_at as "emailedAt"
   `;
 }
 
@@ -342,7 +382,7 @@ export async function createDraftOrder(params: {
       JSON.stringify(params.metadata ?? {}),
     ],
   );
-  return rows[0];
+  return normalizeOrderRecord(rows[0]);
 }
 
 export async function updateOrderCheckoutSession(orderId: string, checkoutSessionId: string) {
@@ -366,7 +406,7 @@ export async function getOrderById(orderId: string) {
     `select ${mapOrderColumns()} from song_orders where id = $1 limit 1`,
     [orderId],
   );
-  return rows[0] ?? null;
+  return rows[0] ? normalizeOrderRecord(rows[0]) : null;
 }
 
 export async function getOrderByCheckoutSessionId(checkoutSessionId: string) {
@@ -376,7 +416,7 @@ export async function getOrderByCheckoutSessionId(checkoutSessionId: string) {
     `select ${mapOrderColumns()} from song_orders where checkout_session_id = $1 limit 1`,
     [checkoutSessionId],
   );
-  return rows[0] ?? null;
+  return rows[0] ? normalizeOrderRecord(rows[0]) : null;
 }
 
 export async function markOrderPaidAndQueued(params: {
@@ -443,7 +483,7 @@ export async function releaseQueueLock(lockId: number) {
 export async function claimQueuedOrders(limit: number) {
   await ensureDatabase();
   const sql = getSql();
-  return sql.unsafe<SongOrderRecord[]>(
+  const rows = await sql.unsafe<SongOrderRecord[]>(
     `
       with next_jobs as (
         select id
@@ -458,10 +498,12 @@ export async function claimQueuedOrders(limit: number) {
           updated_at = now()
       from next_jobs
       where so.id = next_jobs.id
-      returning ${mapOrderColumns()}
+      returning ${mapOrderColumns("so")}
     `,
     [limit],
   );
+
+  return normalizeOrderRecords(rows);
 }
 
 export async function updateOrderGenerationState(params: {
@@ -554,16 +596,18 @@ export async function listOrdersForVenueIds(venueIds: string[]) {
   }
 
   const sql = getSql();
-  return sql.unsafe<SongOrderRecord[]>(
+  const rows = await sql.unsafe<SongOrderRecord[]>(
     `select ${mapOrderColumns()} from song_orders where venue_id = any($1) order by created_at desc`,
     [venueIds],
   );
+
+  return normalizeOrderRecords(rows);
 }
 
 export async function listRecentCompletedOrdersForVenue(venueId: string, limit = 6) {
   await ensureDatabase();
   const sql = getSql();
-  return sql.unsafe<SongOrderRecord[]>(
+  const rows = await sql.unsafe<SongOrderRecord[]>(
     `
       select ${mapOrderColumns()}
       from song_orders
@@ -573,13 +617,17 @@ export async function listRecentCompletedOrdersForVenue(venueId: string, limit =
     `,
     [venueId, limit],
   );
+
+  return normalizeOrderRecords(rows);
 }
 
 export async function listAllOrders(limit = 50) {
   await ensureDatabase();
   const sql = getSql();
-  return sql.unsafe<SongOrderRecord[]>(
+  const rows = await sql.unsafe<SongOrderRecord[]>(
     `select ${mapOrderColumns()} from song_orders order by created_at desc limit $1`,
     [limit],
   );
+
+  return normalizeOrderRecords(rows);
 }

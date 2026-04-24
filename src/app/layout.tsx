@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Geist, Geist_Mono } from "next/font/google";
+
+import { hasClerkClientKeys } from "@/lib/clerk";
+
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,13 +27,15 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const body = hasClerkClientKeys() ? <ClerkProvider>{children}</ClerkProvider> : children;
+
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full`}
     >
       <body className="min-h-full bg-background font-sans text-foreground antialiased">
-        <ClerkProvider>{children}</ClerkProvider>
+        {body}
       </body>
     </html>
   );

@@ -49,3 +49,5 @@ next-env.d.ts
 # local debug files
 dev.out.log
 dev.err.log
+
+.vercel

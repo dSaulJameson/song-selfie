@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import {
   createDraftOrder,
@@ -53,7 +53,9 @@ export async function POST(request: Request, { params }: Props) {
         rawInputs: input,
       });
 
-      await drainGenerationQueue();
+      after(async () => {
+        await drainGenerationQueue();
+      });
 
       return NextResponse.json({
         url: `/v/${venue.slug}/success?order_id=${draftOrder.id}`,

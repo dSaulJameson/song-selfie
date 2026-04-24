@@ -1,6 +1,6 @@
 import Stripe from "stripe";
 import { headers } from "next/headers";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { drainGenerationQueue } from "@/lib/queue";
 import {
@@ -62,7 +62,9 @@ export async function POST(request: Request) {
           rawInputs,
         });
 
-        await drainGenerationQueue();
+        after(async () => {
+          await drainGenerationQueue();
+        });
       }
     }
   }

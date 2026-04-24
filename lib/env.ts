@@ -1,8 +1,26 @@
+function normalizeEnvValue(value: string) {
+  const trimmed = value.trim();
+  const connectionStringMatch = trimmed.match(/postgres(?:ql)?:\/\/[^'"\s]+/i);
+
+  if (connectionStringMatch) {
+    return connectionStringMatch[0];
+  }
+
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+
+  return trimmed;
+}
+
 function getFirstEnv(...keys: string[]) {
   for (const key of keys) {
     const value = process.env[key];
     if (value && value.trim().length > 0) {
-      return value.trim();
+      return normalizeEnvValue(value);
     }
   }
 

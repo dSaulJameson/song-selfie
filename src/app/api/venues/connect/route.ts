@@ -1,6 +1,7 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
+import { hasClerkServerKeys } from "@/lib/clerk";
 import {
   getVenueById,
   saveVenueStripeAccount,
@@ -11,6 +12,10 @@ import { createConnectOnboardingLink } from "@/lib/stripe";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
+  if (!hasClerkServerKeys()) {
+    return NextResponse.redirect(new URL("/sign-in", request.url));
+  }
+
   const session = await auth();
 
   if (!session.userId) {

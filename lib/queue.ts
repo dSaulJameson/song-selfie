@@ -92,16 +92,23 @@ async function processOrder(orderId: string) {
       finetuneResponse: completedGeneration as Record<string, unknown>,
     });
 
-    await sendSongReadyEmails({
-      customerEmail: order.customerEmail,
-      venueEmail: venue.contactEmail,
-      venueName: venue.name,
-      songUrl,
-      prompt: promptPackage.naturalPrompt,
-      names: input.names,
-    });
+    try {
+      await sendSongReadyEmails({
+        customerEmail: order.customerEmail,
+        venueEmail: venue.contactEmail,
+        venueName: venue.name,
+        songUrl,
+        prompt: promptPackage.naturalPrompt,
+        names: input.names,
+      });
 
-    await markOrderEmailed(orderId);
+      await markOrderEmailed(orderId);
+    } catch (error) {
+      console.error("Song email delivery failed", {
+        orderId,
+        message: error instanceof Error ? error.message : "Unknown SES error",
+      });
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown generation error";
     await failOrder(orderId, message);

@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { getOrderByCheckoutSessionId, getOrderById } from "@/lib/db";
-import { formatDate } from "@/lib/utils";
+import { OrderStatusCard } from "@/src/components/public/order-status-card";
 
 type Props = {
   searchParams: Promise<{ session_id?: string; order_id?: string }>;
@@ -26,27 +26,11 @@ export default async function VenueSuccessPage({ searchParams }: Props) {
           Your song is officially in the queue.
         </h1>
         <p className="mt-4 text-base leading-7 text-[color:var(--color-muted-foreground)]">
-          We’re building the prompt, sending the generation job, and emailing
+          We are building the prompt, sending the generation job, and emailing
           the finished file once delivery is complete.
         </p>
 
-        {order ? (
-          <div className="mt-6 rounded-[1.5rem] bg-[color:var(--color-surface)] p-5">
-            <p className="text-sm">
-              <span className="font-semibold">Status:</span> {order.status}
-            </p>
-            <p className="mt-2 text-sm">
-              <span className="font-semibold">Email:</span> {order.customerEmail}
-            </p>
-            <p className="mt-2 text-sm">
-              <span className="font-semibold">Created:</span> {formatDate(order.createdAt)}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-              {order.generatedPrompt ??
-                "Prompt generation begins after the queue picks up your order."}
-            </p>
-          </div>
-        ) : null}
+        {order ? <OrderStatusCard initialOrder={order} /> : null}
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
           <Link
