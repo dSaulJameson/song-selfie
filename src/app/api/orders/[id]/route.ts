@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getOrderById } from "@/lib/db";
+import { recoverProcessingOrder } from "@/lib/queue";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -10,7 +11,11 @@ export const runtime = "nodejs";
 
 export async function GET(_request: Request, { params }: Props) {
   const { id } = await params;
-  const order = await getOrderById(id);
+  let order = await getOrderById(id);
+
+  if (order?.status === "processing" && order.finetuneGenerationId) {
+    order = await recoverProcessingOrder(id);
+  }
 
   if (!order) {
     return NextResponse.json({ error: "Order not found." }, { status: 404 });

@@ -10,7 +10,10 @@ import {
   tryAcquireQueueLock,
   updateOrderGenerationState,
 } from "@/lib/db";
-import { createFineTuneGeneration, waitForFineTuneCompletion } from "@/lib/finetune";
+import {
+  createFineTuneGeneration,
+  getFineTuneGeneration,
+} from "@/lib/finetune";
 import { buildFallbackSongPacket, generateSongPacket } from "@/lib/openrouter";
 import { buildPromptPackage } from "@/lib/prompt-builder";
 import { songRequestSchema } from "@/lib/schema";
@@ -27,6 +30,106 @@ const FINETUNE_KEY_MAP: Record<string, string> = {
   Ab: "G#",
   Bb: "A#",
 };
+
+async function finalizeCompletedOrder(orderId: string) {
+  const order = await getOrderById(orderId);
+  if (!order || !order.finetuneGenerationId || order.songUrl) {
+    return order;
+  }
+
+  const venue = await getVenueById(order.venueId);
+  if (!venue) {
+    await failOrder(orderId, "Venue was deleted before generation could complete.");
+    return null;
+  }
+
+  const input = songRequestSchema.parse(order.rawInputs);
+  const generation = await getFineTuneGeneration(order.finetuneGenerationId);
+  const status = generation.status.toLowerCase();
+
+  if (status === "failed" || status === "error" || status === "cancelled") {
+    throw new Error(
+      generation.errorMessage ||
+        generation.error ||
+        `FineTune generation ${order.finetuneGenerationId} failed with status ${status}.`,
+    );
+  }
+
+  if (status !== "completed" && status !== "succeeded") {
+    return order;
+  }
+
+  const audioUrl =
+    (generation.audioUrl as string | undefined) ??
+    (generation.audio_url as string | undefined);
+
+  if (!audioUrl) {
+    throw new Error("FineTune completed without returning an audio URL.");
+  }
+
+  const audioResponse = await fetch(audioUrl, { cache: "no-store" });
+  if (!audioResponse.ok) {
+    throw new Error(`Could not download generated audio (${audioResponse.status}).`);
+  }
+
+  let songUrl = audioUrl;
+  let s3Key = "";
+
+  try {
+    const buffer = Buffer.from(await audioResponse.arrayBuffer());
+    const upload = await uploadSongToS3({
+      buffer,
+      orderId,
+      venueSlug: venue.slug,
+    });
+    songUrl = upload.publicUrl;
+    s3Key = upload.key;
+  } catch {
+    // Fall back to the provider-hosted audio URL when S3 is not configured.
+  }
+
+  await completeOrder({
+    orderId,
+    songUrl,
+    s3Key,
+    finetuneResponse: generation as Record<string, unknown>,
+  });
+
+  try {
+    await sendSongReadyEmails({
+      customerEmail: order.customerEmail,
+      venueEmail: venue.contactEmail,
+      venueName: venue.name,
+      songUrl,
+      prompt: order.generatedPrompt ?? "Your Song Selfie custom song is ready.",
+      names: input.names,
+    });
+
+    await markOrderEmailed(orderId);
+  } catch (error) {
+    console.error("Song email delivery failed", {
+      orderId,
+      message: error instanceof Error ? error.message : "Unknown SES error",
+    });
+  }
+
+  return getOrderById(orderId);
+}
+
+export async function recoverProcessingOrder(orderId: string) {
+  const order = await getOrderById(orderId);
+  if (!order || order.status !== "processing" || !order.finetuneGenerationId) {
+    return order;
+  }
+
+  try {
+    return await finalizeCompletedOrder(orderId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown generation recovery error";
+    await failOrder(orderId, message);
+    return getOrderById(orderId);
+  }
+}
 
 async function processOrder(orderId: string) {
   const order = await getOrderById(orderId);
@@ -83,60 +186,7 @@ async function processOrder(orderId: string) {
       },
     });
 
-    const completedGeneration = await waitForFineTuneCompletion(generation.id);
-    const audioUrl =
-      (completedGeneration.audioUrl as string | undefined) ??
-      (completedGeneration.audio_url as string | undefined);
-
-    if (!audioUrl) {
-      throw new Error("FineTune completed without returning an audio URL.");
-    }
-
-    const audioResponse = await fetch(audioUrl, { cache: "no-store" });
-    if (!audioResponse.ok) {
-      throw new Error(`Could not download generated audio (${audioResponse.status}).`);
-    }
-
-    let songUrl = audioUrl;
-    let s3Key = "";
-
-    try {
-      const buffer = Buffer.from(await audioResponse.arrayBuffer());
-      const upload = await uploadSongToS3({
-        buffer,
-        orderId,
-        venueSlug: venue.slug,
-      });
-      songUrl = upload.publicUrl;
-      s3Key = upload.key;
-    } catch {
-      // Fall back to the provider-hosted audio URL when S3 is not configured.
-    }
-
-    await completeOrder({
-      orderId,
-      songUrl,
-      s3Key,
-      finetuneResponse: completedGeneration as Record<string, unknown>,
-    });
-
-    try {
-      await sendSongReadyEmails({
-        customerEmail: order.customerEmail,
-        venueEmail: venue.contactEmail,
-        venueName: venue.name,
-        songUrl,
-        prompt: songPacket.naturalPrompt,
-        names: input.names,
-      });
-
-      await markOrderEmailed(orderId);
-    } catch (error) {
-      console.error("Song email delivery failed", {
-        orderId,
-        message: error instanceof Error ? error.message : "Unknown SES error",
-      });
-    }
+    await finalizeCompletedOrder(orderId);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown generation error";
     await failOrder(orderId, message);
