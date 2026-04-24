@@ -20,6 +20,11 @@ export const metadata: Metadata = {
   title: "Song Selfie",
   description:
     "SongSelfie.com turns bar, restaurant, and party memories into custom songs guests can keep.",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

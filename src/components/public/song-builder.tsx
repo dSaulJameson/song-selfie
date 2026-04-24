@@ -10,6 +10,7 @@ import type {
 } from "@/lib/finetune-capabilities";
 import type { SongRequestInput } from "@/lib/schema";
 import { cn } from "@/lib/utils";
+import { SongSelfieLogo } from "@/src/components/public/song-selfie-logo";
 import { Button } from "@/src/components/ui/button";
 
 type Capabilities = ReturnType<typeof getFineTuneCapabilities>;
@@ -98,14 +99,10 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
         <div className="border-b border-slate-200/80 px-5 py-5 sm:px-8 sm:py-7">
           <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
             <div className="space-y-4">
-              <div className="inline-flex items-center gap-3 rounded-full bg-white px-4 py-2 shadow-[0_10px_25px_rgba(148,63,255,0.12)]">
-                <span className="text-sm font-black tracking-[0.24em] text-violet-600">
-                  SONG SELFIE
-                </span>
-              </div>
+              <SongSelfieLogo />
               <div className="space-y-2">
                 <p className="text-lg text-slate-500 sm:text-xl">
-                  Make a soundtrack for your selfies.
+                  Song Selfies are the soundtrack to your memories.
                 </p>
                 <h1 className="text-4xl font-black tracking-tight text-slate-950 sm:text-5xl">
                   Let&apos;s make <span className="text-fuchsia-500">your</span> song
