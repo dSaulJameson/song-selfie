@@ -15,15 +15,13 @@ import {
 } from "@/lib/schema";
 
 export async function createVenueAction(formData: FormData) {
-  const user = await requireAdminUser();
-  const defaultEmail = user.primaryEmailAddress?.emailAddress ?? "";
+  await requireAdminUser();
 
   const input = createVenueSchema.parse({
     name: formData.get("name"),
     slug: formData.get("slug"),
     description: formData.get("description"),
-    ownerClerkUserId: formData.get("ownerClerkUserId") || user.id,
-    contactEmail: formData.get("contactEmail") || defaultEmail,
+    contactEmail: formData.get("contactEmail"),
     priceCents: formData.get("priceCents"),
     venueSharePercent: formData.get("venueSharePercent"),
   });
@@ -31,6 +29,7 @@ export async function createVenueAction(formData: FormData) {
   await createVenueRecord(input);
   revalidatePath("/admin");
   revalidatePath("/venue");
+  revalidatePath("/login");
 }
 
 export async function updateVenueShareAction(formData: FormData) {
@@ -43,6 +42,7 @@ export async function updateVenueShareAction(formData: FormData) {
   await updateVenueSharePercent(input.venueId, input.venueSharePercent);
   revalidatePath("/admin");
   revalidatePath("/venue");
+  revalidatePath("/stripe-demo");
 }
 
 export async function updateVenuePricingAction(formData: FormData) {
@@ -55,4 +55,6 @@ export async function updateVenuePricingAction(formData: FormData) {
   await updateVenuePrice(input.venueId, input.priceCents);
   revalidatePath("/admin");
   revalidatePath("/venue");
+  revalidatePath("/");
+  revalidatePath("/stripe-demo");
 }

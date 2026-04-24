@@ -104,7 +104,6 @@ export const createVenueSchema = z.object({
   name: z.string().trim().min(2).max(80),
   slug: z.string().trim().min(2).max(64),
   description: z.string().trim().max(220).default(""),
-  ownerClerkUserId: z.string().trim().min(3).max(100),
   contactEmail: z.email(),
   priceCents: z.preprocess(
     (value) => Number(value),
@@ -112,7 +111,7 @@ export const createVenueSchema = z.object({
   ),
   venueSharePercent: z.preprocess(
     (value) => Number(value),
-    z.number().int().min(1).max(99),
+    z.number().int().min(0).max(100),
   ),
 });
 
@@ -120,7 +119,7 @@ export const updateVenueShareSchema = z.object({
   venueId: z.string().trim().min(4),
   venueSharePercent: z.preprocess(
     (value) => Number(value),
-    z.number().int().min(1).max(99),
+    z.number().int().min(0).max(100),
   ),
 });
 

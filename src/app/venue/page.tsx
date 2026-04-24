@@ -5,7 +5,7 @@ import { getDashboardActor } from "@/lib/auth";
 import {
   listAllVenues,
   listOrdersForVenueIds,
-  listVenuesByOwner,
+  listVenuesByContactEmail,
   updateVenuePrice,
   updateVenueStripeStatus,
 } from "@/lib/db";
@@ -17,7 +17,7 @@ export default async function VenuePage() {
   const actor = await getDashboardActor();
   const venues = actor.isAdmin
     ? await listAllVenues()
-    : await listVenuesByOwner(actor.user.id);
+    : await listVenuesByContactEmail(actor.email);
   const baseUrl = getBaseUrl();
 
   const venueCards = await Promise.all(
@@ -116,8 +116,8 @@ export default async function VenuePage() {
         {venueCards.length === 0 ? (
           <div className="rounded-[2rem] border border-[color:var(--color-line)] bg-white/86 p-6 shadow-[0_18px_44px_rgba(22,12,46,0.08)]">
             <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-              No venues are assigned to this Clerk user yet. An admin can create
-              a venue and point it at your Clerk user ID from the admin dashboard.
+              This signed-in email has not been invited to a venue dashboard yet.
+              An admin can add your email from the admin dashboard to unlock venue access.
             </p>
           </div>
         ) : (

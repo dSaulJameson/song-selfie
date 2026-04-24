@@ -1,6 +1,7 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 
+import { listVenuesByContactEmail } from "@/lib/db";
 import { hasClerkServerKeys } from "@/lib/clerk";
 import { getAdminEmails } from "@/lib/env";
 
@@ -36,6 +37,15 @@ export function isAdminEmail(email: string) {
   return admins.includes(email.toLowerCase());
 }
 
+export async function getDashboardDestinationForEmail(email: string) {
+  if (isAdminEmail(email)) {
+    return "/admin";
+  }
+
+  const venues = await listVenuesByContactEmail(email);
+  return venues.length > 0 ? "/venue" : null;
+}
+
 export async function requireAdminUser() {
   const user = await requireSignedInUser();
   const email = getUserEmail(user);
@@ -50,10 +60,12 @@ export async function requireAdminUser() {
 export async function getDashboardActor() {
   const user = await requireSignedInUser();
   const email = getUserEmail(user);
+  const dashboardDestination = await getDashboardDestinationForEmail(email);
 
   return {
     user,
     email,
     isAdmin: isAdminEmail(email),
+    hasVenueAccess: dashboardDestination === "/venue" || dashboardDestination === "/admin",
   };
 }

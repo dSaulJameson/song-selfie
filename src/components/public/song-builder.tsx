@@ -1,7 +1,6 @@
 "use client";
 
 import { ArrowRight, ChevronDown, Loader2, Lock, Mail, Sparkles } from "lucide-react";
-import Link from "next/link";
 import { startTransition, useState, useTransition } from "react";
 
 import type {
@@ -137,9 +136,14 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
             <section className="grid gap-4 md:grid-cols-2">
               {namesField ? (
                 <label className="space-y-3">
-                  <span className="text-sm font-black uppercase tracking-[0.16em] text-slate-900">
-                    Who&apos;s it about?
-                  </span>
+                  <div className="space-y-1">
+                    <span className="text-sm font-black uppercase tracking-[0.16em] text-slate-900">
+                      Who&apos;s it about?
+                    </span>
+                    <p className="text-xs text-slate-500">
+                      Separate people, groups, and pets with commas.
+                    </p>
+                  </div>
                   <input
                     type="text"
                     value={form.names}
@@ -152,10 +156,15 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
 
               {emailField ? (
                 <label className="space-y-3">
-                  <span className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-slate-900">
-                    <Mail className="h-4 w-4 text-violet-500" />
-                    Your email
-                  </span>
+                  <div className="space-y-1">
+                    <span className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-slate-900">
+                      <Mail className="h-4 w-4 text-violet-500" />
+                      Email
+                    </span>
+                    <p className="text-xs text-slate-500">
+                      Where are we sending the song?
+                    </p>
+                  </div>
                   <input
                     type="email"
                     value={form.email}
@@ -513,22 +522,6 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
                 ))}
               </div>
             </section>
-
-            <div className="rounded-[1.6rem] border border-slate-200 bg-white/90 p-4 shadow-[0_14px_26px_rgba(15,23,42,0.08)]">
-              <p className="text-xs font-bold uppercase tracking-[0.22em] text-violet-600">
-                Venue tools
-              </p>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                Venue and admin dashboards stay separate from the guest flow, but this
-                page still routes through the normal Stripe-first generation path.
-              </p>
-              <Link
-                href="/login"
-                className="mt-4 inline-flex text-sm font-semibold text-violet-700"
-              >
-                Venue/Admin sign in
-              </Link>
-            </div>
           </div>
         </div>
       </div>

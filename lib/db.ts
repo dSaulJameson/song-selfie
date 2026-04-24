@@ -20,6 +20,16 @@ export type VenueRecord = {
   updatedAt: string;
 };
 
+export type UpsertVenueInput = {
+  name: string;
+  slug: string;
+  description?: string;
+  contactEmail: string;
+  priceCents: number;
+  venueSharePercent: number;
+  ownerClerkUserId?: string;
+};
+
 export type SongOrderRecord = {
   id: string;
   venueId: string;
@@ -158,7 +168,7 @@ export async function ensureDatabase() {
           stripe_account_id text,
           stripe_charges_enabled boolean not null default false,
           stripe_payouts_enabled boolean not null default false,
-          venue_share_percent integer not null default 80 check (venue_share_percent between 1 and 99),
+          venue_share_percent integer not null default 70 check (venue_share_percent between 0 and 100),
           price_cents integer not null default 2500 check (price_cents >= 0),
           created_at timestamptz not null default now(),
           updated_at timestamptz not null default now()
@@ -206,6 +216,26 @@ export async function ensureDatabase() {
 
         alter table venues
         add constraint venues_price_cents_check check (price_cents >= 0);
+
+        do $$
+        begin
+          if exists (
+            select 1
+            from pg_constraint
+            where conname = 'venues_venue_share_percent_check'
+          ) then
+            alter table venues drop constraint venues_venue_share_percent_check;
+          end if;
+        exception when undefined_table then
+          null;
+        end $$;
+
+        alter table venues
+        alter column venue_share_percent set default 70;
+
+        alter table venues
+        add constraint venues_venue_share_percent_check
+        check (venue_share_percent between 0 and 100);
       `);
     })();
   }
@@ -219,6 +249,20 @@ export async function listVenuesByOwner(ownerClerkUserId: string) {
   return sql.unsafe<VenueRecord[]>(
     `select ${mapVenueColumns()} from venues where owner_clerk_user_id = $1 order by created_at desc`,
     [ownerClerkUserId],
+  );
+}
+
+export async function listVenuesByContactEmail(contactEmail: string) {
+  await ensureDatabase();
+  const sql = getSql();
+  return sql.unsafe<VenueRecord[]>(
+    `
+      select ${mapVenueColumns()}
+      from venues
+      where lower(contact_email) = lower($1)
+      order by created_at desc
+    `,
+    [contactEmail],
   );
 }
 
@@ -250,19 +294,14 @@ export async function getVenueBySlug(slug: string) {
   return rows[0] ?? null;
 }
 
-export async function createVenueRecord(input: {
-  name: string;
-  slug: string;
-  description?: string;
-  ownerClerkUserId: string;
-  contactEmail: string;
-  priceCents: number;
-  venueSharePercent: number;
-}) {
+export async function createVenueRecord(input: UpsertVenueInput) {
   await ensureDatabase();
   const sql = getSql();
   const normalizedSlug = slugify(input.slug || input.name);
   const id = crypto.randomUUID();
+  const normalizedEmail = input.contactEmail.trim().toLowerCase();
+  const ownerKey =
+    input.ownerClerkUserId?.trim() || `email:${normalizedEmail}`;
 
   const rows = await sql.unsafe<VenueRecord[]>(
     `
@@ -284,8 +323,54 @@ export async function createVenueRecord(input: {
       input.name,
       normalizedSlug,
       input.description || null,
-      input.ownerClerkUserId,
-      input.contactEmail,
+      ownerKey,
+      normalizedEmail,
+      input.priceCents,
+      input.venueSharePercent,
+    ],
+  );
+
+  return rows[0];
+}
+
+export async function upsertVenueRecord(input: UpsertVenueInput) {
+  await ensureDatabase();
+  const sql = getSql();
+  const normalizedSlug = slugify(input.slug || input.name);
+  const normalizedEmail = input.contactEmail.trim().toLowerCase();
+  const ownerKey =
+    input.ownerClerkUserId?.trim() || `email:${normalizedEmail}`;
+
+  const rows = await sql.unsafe<VenueRecord[]>(
+    `
+      insert into venues (
+        id,
+        name,
+        slug,
+        description,
+        owner_clerk_user_id,
+        contact_email,
+        price_cents,
+        venue_share_percent
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8)
+      on conflict (slug) do update
+      set name = excluded.name,
+          description = excluded.description,
+          owner_clerk_user_id = excluded.owner_clerk_user_id,
+          contact_email = excluded.contact_email,
+          price_cents = excluded.price_cents,
+          venue_share_percent = excluded.venue_share_percent,
+          updated_at = now()
+      returning ${mapVenueColumns()}
+    `,
+    [
+      crypto.randomUUID(),
+      input.name,
+      normalizedSlug,
+      input.description || null,
+      ownerKey,
+      normalizedEmail,
       input.priceCents,
       input.venueSharePercent,
     ],
