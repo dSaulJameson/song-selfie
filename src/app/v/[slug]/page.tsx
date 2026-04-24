@@ -21,7 +21,7 @@ export default async function VenueSongPage({ params }: Props) {
   const capabilities = getFineTuneCapabilities();
 
   return (
-    <main className="pb-8">
+    <main className="mx-auto max-w-7xl space-y-6 px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
       <SongBuilder
         venue={{
           name: venue.name,
@@ -32,8 +32,8 @@ export default async function VenueSongPage({ params }: Props) {
         capabilities={capabilities}
       />
 
-      <section className="mx-auto mt-2 w-full max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="rounded-[2rem] border border-[color:var(--color-line)] bg-white/82 p-6 shadow-[0_18px_44px_rgba(22,12,46,0.08)]">
+      <section className="rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(28,21,49,0.94),rgba(18,14,31,0.96))] p-6 shadow-[0_28px_80px_rgba(11,8,25,0.3)]">
+        <div className="rounded-[1.6rem] border border-white/10 bg-white/95 p-6">
           <p className="text-xs font-bold uppercase tracking-[0.28em] text-[color:var(--color-accent)]">
             Recent drops
           </p>
