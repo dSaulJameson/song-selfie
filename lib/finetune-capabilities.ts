@@ -124,6 +124,7 @@ export function getSongRequestDefaults(): SongRequestInput {
     mood: "happy",
     energy: 4,
     story: "",
+    mentionVenueName: false,
     makeFunny: false,
     includeEveryoneNames: true,
     makeDramatic: false,
@@ -231,6 +232,16 @@ export function getFineTuneCapabilities() {
           helper:
             "Structure is tag-driven. FineTune exposes `tags`, so structure hints are encoded there.",
         },
+        {
+          id: "duration",
+          label: "Duration (seconds)",
+          kind: "range",
+          min: 15,
+          max: 180,
+          step: 15,
+          helper: "Shorter songs need tighter, fewer lyrics.",
+          apiParameter: true,
+        },
       ],
     },
     {
@@ -255,6 +266,11 @@ export function getFineTuneCapabilities() {
           label: "Make it dramatic",
           kind: "toggle",
         },
+        {
+          id: "mentionVenueName",
+          label: "Mention the venue",
+          kind: "toggle",
+        },
       ],
     },
     {
@@ -265,15 +281,6 @@ export function getFineTuneCapabilities() {
         "These fields map one-to-one to the documented Finetuning.ai music generation API: `lyrics`, `duration`, `bpm`, `language`, `key`, `scale`, `timesignature`, and `seed`. `tags` is synthesized from the creative controls above.",
       collapsible: true,
       fields: [
-        {
-          id: "duration",
-          label: "Duration (seconds)",
-          kind: "range",
-          min: 15,
-          max: 180,
-          step: 15,
-          apiParameter: true,
-        },
         {
           id: "language",
           label: "Language",

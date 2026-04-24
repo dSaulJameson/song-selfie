@@ -83,6 +83,7 @@ export const songRequestSchema = z.object({
   mood: z.enum(MOOD_VALUES),
   energy: z.preprocess((value) => Number(value), z.number().int().min(1).max(5)),
   story: z.string().trim().max(320).default(""),
+  mentionVenueName: z.boolean().default(false),
   makeFunny: z.boolean().default(false),
   includeEveryoneNames: z.boolean().default(true),
   makeDramatic: z.boolean().default(false),

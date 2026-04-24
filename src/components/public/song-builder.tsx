@@ -1,15 +1,6 @@
 "use client";
 
-import {
-  ArrowRight,
-  ChevronDown,
-  Loader2,
-  Lock,
-  Mail,
-  Music4,
-  Sparkles,
-  WandSparkles,
-} from "lucide-react";
+import { ArrowRight, ChevronDown, Loader2, Lock, Mail, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { startTransition, useState, useTransition } from "react";
 
@@ -33,24 +24,6 @@ type SongBuilderProps = {
   capabilities: Capabilities;
 };
 
-const SONG_TYPE_EMOJI: Record<string, string> = {
-  "epic-battle": "⚔️",
-  "love-song": "💗",
-  "party-anthem": "🪩",
-  "funny-roast": "😂",
-  "sexy-vibe": "🔥",
-  "chill-vibe": "🌴",
-  "story-mode": "📖",
-};
-
-const MOOD_EMOJI: Record<string, string> = {
-  chill: "😎",
-  happy: "🙂",
-  emotional: "🥹",
-  aggressive: "😡",
-  hype: "🚀",
-};
-
 function money(amountInCents: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -71,25 +44,19 @@ function getOptions(field: FormField) {
 export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
   const [form, setForm] = useState<SongRequestInput>(capabilities.defaults);
   const [error, setError] = useState<string | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [isPending, startSubmit] = useTransition();
 
   const namesField = getField(capabilities, "names");
   const emailField = getField(capabilities, "email");
+  const storyField = getField(capabilities, "story");
   const songTypeField = getField(capabilities, "songType");
   const moodField = getField(capabilities, "mood");
   const genreField = getField(capabilities, "genre");
-  const bpmField = getField(capabilities, "bpm");
-  const energyField = getField(capabilities, "energy");
-  const storyField = getField(capabilities, "story");
   const structureField = getField(capabilities, "structure");
+  const bpmField = getField(capabilities, "bpm");
   const durationField = getField(capabilities, "duration");
-  const languageField = getField(capabilities, "language");
-  const keyField = getField(capabilities, "key");
-  const scaleField = getField(capabilities, "scale");
-  const timeSignatureField = getField(capabilities, "timesignature");
-  const lyricsField = getField(capabilities, "lyrics");
-  const seedField = getField(capabilities, "seed");
+  const energyField = getField(capabilities, "energy");
+  const mentionVenueField = getField(capabilities, "mentionVenueName");
 
   const updateField = <T extends keyof SongRequestInput>(
     field: T,
@@ -131,19 +98,10 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
         <div className="border-b border-slate-200/80 px-5 py-5 sm:px-8 sm:py-7">
           <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="inline-flex items-center gap-3 rounded-full bg-white px-4 py-2 shadow-[0_10px_25px_rgba(148,63,255,0.12)]">
-                  <span className="text-2xl">🎵</span>
-                  <div>
-                    <p className="font-black tracking-tight text-[color:#1d122b] sm:text-2xl">
-                      Song Selfie
-                    </p>
-                  </div>
-                </div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-violet-700">
-                  <WandSparkles className="h-4 w-4" />
-                  AI Magic
-                </div>
+              <div className="inline-flex items-center gap-3 rounded-full bg-white px-4 py-2 shadow-[0_10px_25px_rgba(148,63,255,0.12)]">
+                <span className="text-sm font-black tracking-[0.24em] text-violet-600">
+                  SONG SELFIE
+                </span>
               </div>
               <div className="space-y-2">
                 <p className="text-lg text-slate-500 sm:text-xl">
@@ -153,8 +111,10 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
                   Let&apos;s make <span className="text-fuchsia-500">your</span> song
                 </h1>
                 <p className="max-w-2xl text-base leading-7 text-slate-500 sm:text-lg">
-                  Answer a few quick questions and we&apos;ll build a custom song for
-                  this moment at {venue.name}. {venue.description ?? "Selfies make the memory. Songs make the soundtrack."}
+                  Answer a few quick questions and we&apos;ll build a custom song for this
+                  moment.{" "}
+                  {venue.description ??
+                    "Selfies make the memory. Songs make the soundtrack."}
                 </p>
               </div>
             </div>
@@ -176,12 +136,11 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
         </div>
 
         <div className="px-5 py-6 sm:px-8 sm:py-8">
-          <div className="mx-auto max-w-5xl space-y-8">
+          <div className="mx-auto max-w-5xl space-y-6">
             <section className="grid gap-4 md:grid-cols-2">
               {namesField ? (
                 <label className="space-y-3">
-                  <span className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-slate-900">
-                    <span className="text-violet-500">◎</span>
+                  <span className="text-sm font-black uppercase tracking-[0.16em] text-slate-900">
                     Who&apos;s it about?
                   </span>
                   <input
@@ -211,10 +170,29 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
               ) : null}
             </section>
 
+            {storyField ? (
+              <section className="space-y-3">
+                <span className="text-sm font-black uppercase tracking-[0.16em] text-slate-900">
+                  What&apos;s the story?
+                </span>
+                <div className="rounded-[1.4rem] border border-slate-200 bg-white p-3 shadow-[inset_0_1px_1px_rgba(15,23,42,0.04)]">
+                  <textarea
+                    rows={4}
+                    value={form.story}
+                    placeholder={storyField.placeholder}
+                    onChange={(event) => updateField("story", event.target.value)}
+                    className="w-full resize-none bg-transparent px-1 py-1 text-base leading-7 text-slate-950 outline-none placeholder:text-slate-400"
+                  />
+                  <div className="flex justify-end text-xs text-slate-400">
+                    {form.story.length}/320
+                  </div>
+                </div>
+              </section>
+            ) : null}
+
             {songTypeField ? (
               <section className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-slate-900">
-                  <span className="text-fuchsia-500">✦</span>
+                <div className="text-sm font-black uppercase tracking-[0.16em] text-slate-900">
                   Pick a song vibe
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
@@ -231,15 +209,15 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
                           )
                         }
                         className={cn(
-                          "rounded-[1.35rem] border px-3 py-4 text-center transition",
+                          "rounded-[1.35rem] border px-3 py-3 text-left transition",
                           selected
                             ? "border-violet-400 bg-[linear-gradient(180deg,#fff,#fff5ff)] shadow-[0_16px_36px_rgba(191,90,242,0.18)]"
                             : "border-slate-200 bg-white hover:border-fuchsia-300 hover:shadow-[0_12px_30px_rgba(15,23,42,0.08)]",
                         )}
                       >
-                        <div className="text-3xl">{SONG_TYPE_EMOJI[option.value] ?? "✨"}</div>
-                        <p className="mt-3 text-sm font-semibold text-slate-900">
-                          {option.label}
+                        <p className="text-sm font-semibold text-slate-900">{option.label}</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-500">
+                          {option.description}
                         </p>
                       </button>
                     );
@@ -250,8 +228,7 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
 
             {moodField ? (
               <section className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-slate-900">
-                  <span className="text-violet-500">⌁</span>
+                <div className="text-sm font-black uppercase tracking-[0.16em] text-slate-900">
                   Mood / energy
                 </div>
                 <div className="grid overflow-hidden rounded-[1.35rem] border border-slate-200 bg-white sm:grid-cols-5">
@@ -265,157 +242,183 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
                           updateField("mood", option.value as SongRequestInput["mood"])
                         }
                         className={cn(
-                          "border-b border-slate-200 px-4 py-4 text-center transition sm:border-b-0 sm:border-r",
+                          "border-b border-slate-200 px-3 py-3 text-center transition sm:border-b-0 sm:border-r",
                           selected
                             ? "bg-[linear-gradient(135deg,#8b46ff,#f34f8b)] text-white"
                             : "bg-white text-slate-900 hover:bg-slate-50",
                         )}
                       >
-                        <div className="text-2xl">{MOOD_EMOJI[option.value] ?? "✨"}</div>
-                        <p className="mt-2 text-sm font-semibold">{option.label}</p>
+                        <p className="text-sm font-semibold">{option.label}</p>
                       </button>
                     );
                   })}
                 </div>
-                {energyField ? (
-                  <div className="rounded-[1.4rem] border border-slate-200 bg-white px-4 py-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <p className="text-sm font-semibold text-slate-900">Energy level</p>
-                      <p className="text-sm font-black text-violet-600">{form.energy}/5</p>
-                    </div>
-                    <input
-                      type="range"
-                      min={energyField.min}
-                      max={energyField.max}
-                      step={energyField.step}
-                      value={form.energy}
-                      onChange={(event) =>
-                        updateField("energy", Number(event.target.value))
-                      }
-                      className="w-full accent-[var(--color-accent)]"
-                    />
-                  </div>
-                ) : null}
               </section>
             ) : null}
 
-            <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(260px,0.8fr)]">
-              {genreField ? (
-                <label className="space-y-3">
-                  <span className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-slate-900">
-                    <span className="text-violet-500">♪</span>
-                    Genre
-                  </span>
-                  <div className="relative">
-                    <select
-                      value={form.genre}
-                      onChange={(event) =>
-                        updateField(
-                          "genre",
-                          event.target.value as SongRequestInput["genre"],
-                        )
-                      }
-                      className="h-14 w-full appearance-none rounded-[1.2rem] border border-slate-200 bg-white px-4 pr-12 text-base text-slate-950 outline-none transition focus:border-fuchsia-400 focus:ring-4 focus:ring-fuchsia-100"
-                    >
-                      {getOptions(genreField).map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                  </div>
-                </label>
-              ) : null}
+            <section className="grid gap-4 xl:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2">
+                {genreField ? (
+                  <label className="space-y-3">
+                    <span className="text-sm font-black uppercase tracking-[0.16em] text-slate-900">
+                      Genre
+                    </span>
+                    <div className="relative">
+                      <select
+                        value={form.genre}
+                        onChange={(event) =>
+                          updateField(
+                            "genre",
+                            event.target.value as SongRequestInput["genre"],
+                          )
+                        }
+                        className="h-14 w-full appearance-none rounded-[1.2rem] border border-slate-200 bg-white px-4 pr-12 text-base text-slate-950 outline-none transition focus:border-fuchsia-400 focus:ring-4 focus:ring-fuchsia-100"
+                      >
+                        {getOptions(genreField).map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                    </div>
+                  </label>
+                ) : null}
 
-              {bpmField ? (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-slate-900">
-                      <span className="text-violet-500">◔</span>
-                      Tempo (BPM)
+                {structureField ? (
+                  <label className="space-y-3">
+                    <span className="text-sm font-black uppercase tracking-[0.16em] text-slate-900">
+                      Structure
                     </span>
-                    <span className="text-sm font-black text-slate-500">
-                      {form.bpm ?? "Auto"} BPM
-                    </span>
-                  </div>
-                  <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-4">
-                    <input
-                      type="range"
-                      min={bpmField.min}
-                      max={bpmField.max}
-                      step={bpmField.step}
-                      value={form.bpm ?? 120}
-                      onChange={(event) =>
-                        updateField("bpm", Number(event.target.value))
-                      }
-                      className="w-full accent-[var(--color-accent)]"
-                    />
-                    <div className="mt-2 flex justify-between text-xs font-medium text-slate-400">
-                      <span>{bpmField.min}</span>
-                      <span>120</span>
-                      <span>{bpmField.max}</span>
+                    <div className="relative">
+                      <select
+                        value={form.structure}
+                        onChange={(event) =>
+                          updateField(
+                            "structure",
+                            event.target.value as SongRequestInput["structure"],
+                          )
+                        }
+                        className="h-14 w-full appearance-none rounded-[1.2rem] border border-slate-200 bg-white px-4 pr-12 text-base text-slate-950 outline-none transition focus:border-fuchsia-400 focus:ring-4 focus:ring-fuchsia-100"
+                      >
+                        {getOptions(structureField).map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                    </div>
+                  </label>
+                ) : null}
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                {bpmField ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-black uppercase tracking-[0.16em] text-slate-900">
+                        Tempo
+                      </span>
+                      <span className="text-sm font-black text-slate-500">
+                        {form.bpm ?? "Auto"} BPM
+                      </span>
+                    </div>
+                    <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3">
+                      <input
+                        type="range"
+                        min={bpmField.min}
+                        max={bpmField.max}
+                        step={bpmField.step}
+                        value={form.bpm ?? 120}
+                        onChange={(event) => updateField("bpm", Number(event.target.value))}
+                        className="w-full accent-[var(--color-accent)]"
+                      />
+                      <div className="mt-2 flex justify-between text-[11px] font-medium text-slate-400">
+                        <span>{bpmField.min}</span>
+                        <span>120</span>
+                        <span>{bpmField.max}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ) : null}
-            </section>
+                ) : null}
 
-            <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
-              {storyField ? (
-                <label className="space-y-3">
-                  <span className="flex items-center gap-2 text-sm font-black uppercase tracking-[0.16em] text-slate-900">
-                    <span className="text-violet-500">✎</span>
-                    What&apos;s the story?
-                  </span>
-                  <div className="rounded-[1.4rem] border border-slate-200 bg-white p-3 shadow-[inset_0_1px_1px_rgba(15,23,42,0.04)]">
-                    <textarea
-                      rows={5}
-                      value={form.story}
-                      placeholder={storyField.placeholder}
-                      onChange={(event) => updateField("story", event.target.value)}
-                      className="w-full resize-none bg-transparent px-1 py-1 text-base leading-7 text-slate-950 outline-none placeholder:text-slate-400"
-                    />
-                    <div className="flex justify-end text-sm text-slate-400">
-                      {form.story.length}/320
+                {durationField ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-black uppercase tracking-[0.16em] text-slate-900">
+                        Duration
+                      </span>
+                      <span className="text-sm font-black text-slate-500">
+                        {form.duration}s
+                      </span>
+                    </div>
+                    <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3">
+                      <input
+                        type="range"
+                        min={durationField.min}
+                        max={durationField.max}
+                        step={durationField.step}
+                        value={form.duration}
+                        onChange={(event) =>
+                          updateField("duration", Number(event.target.value))
+                        }
+                        className="w-full accent-[var(--color-accent)]"
+                      />
+                      <div className="mt-2 flex justify-between text-[11px] font-medium text-slate-400">
+                        <span>{durationField.min}s</span>
+                        <span>60s</span>
+                        <span>{durationField.max}s</span>
+                      </div>
                     </div>
                   </div>
-                </label>
-              ) : null}
-
-              <div className="flex items-end">
-                <div className="relative w-full overflow-hidden rounded-[1.8rem] border border-fuchsia-100 bg-[radial-gradient(circle_at_top,rgba(244,114,182,0.24),transparent_35%),linear-gradient(180deg,#fff6fb,#f5efff)] p-5 text-center shadow-[0_20px_40px_rgba(180,90,255,0.14)]">
-                  <div className="absolute right-4 top-4 text-2xl">♪</div>
-                  <div className="absolute left-5 top-12 text-xl">♫</div>
-                  <div className="mx-auto flex h-28 w-24 items-center justify-center rounded-[2rem] bg-[linear-gradient(180deg,#ff8dc8,#d953ff)] text-5xl shadow-[0_20px_40px_rgba(217,83,255,0.28)]">
-                    <Music4 className="h-10 w-10 text-white" />
-                  </div>
-                  <p className="mt-4 text-sm font-semibold text-slate-600">
-                    Your table becomes the hook, the chorus, and the memory.
-                  </p>
-                </div>
+                ) : null}
               </div>
             </section>
 
-            <section className="grid gap-3 lg:grid-cols-3">
+            {energyField ? (
+              <section className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-black uppercase tracking-[0.16em] text-slate-900">
+                    Energy level
+                  </span>
+                  <span className="text-sm font-black text-violet-600">{form.energy}/5</span>
+                </div>
+                <div className="rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3">
+                  <input
+                    type="range"
+                    min={energyField.min}
+                    max={energyField.max}
+                    step={energyField.step}
+                    value={form.energy}
+                    onChange={(event) => updateField("energy", Number(event.target.value))}
+                    className="w-full accent-[var(--color-accent)]"
+                  />
+                </div>
+              </section>
+            ) : null}
+
+            <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {[
                 {
                   key: "includeEveryoneNames" as const,
-                  title: "Include Everyone's Names",
-                  subtitle: "We'll shout out your crew.",
-                  icon: "✨",
+                  title: "Include everyone's names",
+                  subtitle: "Call out the whole crew.",
                 },
                 {
                   key: "makeFunny" as const,
-                  title: "Make It Funny",
+                  title: "Make it funny",
                   subtitle: "Bring the laughs.",
-                  icon: "🙂",
                 },
                 {
                   key: "makeDramatic" as const,
-                  title: "Make It Dramatic",
-                  subtitle: "Go big or go home.",
-                  icon: "🔥",
+                  title: "Make it dramatic",
+                  subtitle: "Push the big moments.",
+                },
+                {
+                  key: "mentionVenueName" as const,
+                  title: mentionVenueField?.label ?? "Mention the venue",
+                  subtitle: "Only if you want the place named.",
                 },
               ].map((toggle) => {
                 const checked = form[toggle.key];
@@ -432,11 +435,8 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
                     )}
                   >
                     <div>
-                      <p className="text-lg">{toggle.icon}</p>
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {toggle.title}
-                      </p>
-                      <p className="text-xs text-slate-500">{toggle.subtitle}</p>
+                      <p className="text-sm font-semibold text-slate-900">{toggle.title}</p>
+                      <p className="mt-1 text-xs text-slate-500">{toggle.subtitle}</p>
                     </div>
                     <div
                       className={cn(
@@ -455,198 +455,6 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
                 );
               })}
             </section>
-
-            {structureField || durationField || languageField || keyField || scaleField || timeSignatureField || lyricsField || seedField ? (
-              <section className="rounded-[1.6rem] border border-slate-200 bg-white">
-                <button
-                  type="button"
-                  onClick={() => setShowAdvanced((current) => !current)}
-                  className="flex w-full items-center justify-between px-4 py-4 text-left"
-                >
-                  <div>
-                    <p className="text-sm font-black uppercase tracking-[0.16em] text-slate-900">
-                      FineTune controls
-                    </p>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Direct generation parameters and optional lyric seeding.
-                    </p>
-                  </div>
-                  <div className="inline-flex items-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    AI Magic
-                  </div>
-                </button>
-
-                {showAdvanced ? (
-                  <div className="grid gap-4 border-t border-slate-200 px-4 py-4 lg:grid-cols-2">
-                    {durationField ? (
-                      <div className="rounded-[1.2rem] border border-slate-200 bg-slate-50/70 px-4 py-4">
-                        <div className="mb-3 flex items-center justify-between">
-                          <p className="text-sm font-semibold text-slate-900">
-                            {durationField.label}
-                          </p>
-                          <p className="text-sm font-black text-violet-600">
-                            {form.duration}s
-                          </p>
-                        </div>
-                        <input
-                          type="range"
-                          min={durationField.min}
-                          max={durationField.max}
-                          step={durationField.step}
-                          value={form.duration}
-                          onChange={(event) =>
-                            updateField("duration", Number(event.target.value))
-                          }
-                          className="w-full accent-[var(--color-accent)]"
-                        />
-                      </div>
-                    ) : null}
-
-                    {languageField ? (
-                      <label className="space-y-2">
-                        <span className="text-sm font-semibold text-slate-900">
-                          {languageField.label}
-                        </span>
-                        <div className="relative">
-                          <select
-                            value={form.language}
-                            onChange={(event) =>
-                              updateField(
-                                "language",
-                                event.target.value as SongRequestInput["language"],
-                              )
-                            }
-                            className="h-12 w-full appearance-none rounded-[1rem] border border-slate-200 bg-slate-50/70 px-4 pr-10 text-sm text-slate-950 outline-none transition focus:border-fuchsia-400 focus:ring-4 focus:ring-fuchsia-100"
-                          >
-                            {getOptions(languageField).map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        </div>
-                      </label>
-                    ) : null}
-
-                    {keyField ? (
-                      <label className="space-y-2">
-                        <span className="text-sm font-semibold text-slate-900">
-                          {keyField.label}
-                        </span>
-                        <div className="relative">
-                          <select
-                            value={form.key}
-                            onChange={(event) =>
-                              updateField(
-                                "key",
-                                event.target.value as SongRequestInput["key"],
-                              )
-                            }
-                            className="h-12 w-full appearance-none rounded-[1rem] border border-slate-200 bg-slate-50/70 px-4 pr-10 text-sm text-slate-950 outline-none transition focus:border-fuchsia-400 focus:ring-4 focus:ring-fuchsia-100"
-                          >
-                            {getOptions(keyField).map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        </div>
-                      </label>
-                    ) : null}
-
-                    {scaleField ? (
-                      <label className="space-y-2">
-                        <span className="text-sm font-semibold text-slate-900">
-                          {scaleField.label}
-                        </span>
-                        <div className="relative">
-                          <select
-                            value={form.scale}
-                            onChange={(event) =>
-                              updateField(
-                                "scale",
-                                event.target.value as SongRequestInput["scale"],
-                              )
-                            }
-                            className="h-12 w-full appearance-none rounded-[1rem] border border-slate-200 bg-slate-50/70 px-4 pr-10 text-sm text-slate-950 outline-none transition focus:border-fuchsia-400 focus:ring-4 focus:ring-fuchsia-100"
-                          >
-                            {getOptions(scaleField).map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        </div>
-                      </label>
-                    ) : null}
-
-                    {timeSignatureField ? (
-                      <label className="space-y-2">
-                        <span className="text-sm font-semibold text-slate-900">
-                          {timeSignatureField.label}
-                        </span>
-                        <div className="relative">
-                          <select
-                            value={form.timesignature}
-                            onChange={(event) =>
-                              updateField(
-                                "timesignature",
-                                event.target.value as SongRequestInput["timesignature"],
-                              )
-                            }
-                            className="h-12 w-full appearance-none rounded-[1rem] border border-slate-200 bg-slate-50/70 px-4 pr-10 text-sm text-slate-950 outline-none transition focus:border-fuchsia-400 focus:ring-4 focus:ring-fuchsia-100"
-                          >
-                            {getOptions(timeSignatureField).map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                          <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                        </div>
-                      </label>
-                    ) : null}
-
-                    {lyricsField ? (
-                      <label className="space-y-2 lg:col-span-2">
-                        <span className="text-sm font-semibold text-slate-900">
-                          {lyricsField.label}
-                        </span>
-                        <textarea
-                          rows={4}
-                          value={form.lyrics}
-                          placeholder={lyricsField.placeholder}
-                          onChange={(event) => updateField("lyrics", event.target.value)}
-                          className="w-full rounded-[1rem] border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-950 outline-none transition focus:border-fuchsia-400 focus:ring-4 focus:ring-fuchsia-100"
-                        />
-                      </label>
-                    ) : null}
-
-                    {seedField ? (
-                      <label className="space-y-2">
-                        <span className="text-sm font-semibold text-slate-900">
-                          {seedField.label}
-                        </span>
-                        <input
-                          type="text"
-                          value={form.seed ?? ""}
-                          placeholder={seedField.placeholder}
-                          onChange={(event) => {
-                            const nextValue = event.target.value.trim();
-                            updateField("seed", nextValue ? Number(nextValue) : null);
-                          }}
-                          className="h-12 w-full rounded-[1rem] border border-slate-200 bg-slate-50/70 px-4 text-sm text-slate-950 outline-none transition focus:border-fuchsia-400 focus:ring-4 focus:ring-fuchsia-100"
-                        />
-                      </label>
-                    ) : null}
-                  </div>
-                ) : null}
-              </section>
-            ) : null}
 
             {error ? (
               <div className="rounded-[1.2rem] border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
@@ -689,41 +497,36 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
               <div className="mt-5 grid gap-3 rounded-[1.4rem] border border-slate-200 bg-white p-4 md:grid-cols-3">
                 {[
                   {
-                    icon: "⚡",
                     title: "Custom AI lyrics",
-                    copy: "Written just for your table.",
+                    copy: "Written just for your moment.",
                   },
                   {
-                    icon: "♫",
-                    title: "Studio-quality output",
-                    copy: "Prompted for a polished final track.",
+                    title: "Duration-aware writing",
+                    copy: "Shorter songs now get tighter lyric packets.",
                   },
                   {
-                    icon: "✉️",
                     title: "Delivered to you",
                     copy: "Email link as soon as it is ready.",
                   },
                 ].map((feature) => (
                   <div key={feature.title} className="text-center md:text-left">
-                    <p className="text-xl">{feature.icon}</p>
-                    <p className="mt-2 text-sm font-semibold text-slate-900">
-                      {feature.title}
-                    </p>
-                    <p className="text-sm text-slate-500">{feature.copy}</p>
+                    <p className="text-sm font-semibold text-slate-900">{feature.title}</p>
+                    <p className="mt-1 text-sm text-slate-500">{feature.copy}</p>
                   </div>
                 ))}
               </div>
             </section>
+
             <div className="rounded-[1.6rem] border border-slate-200 bg-white/90 p-4 shadow-[0_14px_26px_rgba(15,23,42,0.08)]">
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-violet-600">
                 Venue tools
               </p>
               <p className="mt-2 text-sm leading-6 text-slate-500">
                 Venue and admin dashboards stay separate from the guest flow, but this
-                same page still routes through the normal Stripe-first generation path.
+                page still routes through the normal Stripe-first generation path.
               </p>
               <Link
-                href="/sign-in"
+                href="/login"
                 className="mt-4 inline-flex text-sm font-semibold text-violet-700"
               >
                 Venue/Admin sign in

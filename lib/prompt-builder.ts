@@ -128,7 +128,8 @@ export function buildPromptPackage(
   const tone = MOOD_TAGS[input.mood];
   const structure = STRUCTURE_TAGS[input.structure];
   const energy = ENERGY_MAP[input.energy] ?? ENERGY_MAP[3];
-  const venueContext = context?.venueName ? ` at ${context.venueName}` : "";
+  const venueContext =
+    input.mentionVenueName && context?.venueName ? ` at ${context.venueName}` : "";
   const explicit = isExplicitSongRequest(input);
   const namesInstruction =
     input.includeEveryoneNames && names.length > 0

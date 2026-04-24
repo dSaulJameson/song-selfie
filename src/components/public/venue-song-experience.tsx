@@ -17,8 +17,30 @@ type VenueSongExperienceProps = {
     completedAt: string | null;
     updatedAt: string;
     songUrl: string | null;
+    rawInputs?: {
+      names?: string;
+    } | null;
   }>;
 };
+
+function buildSongCardLabel(names?: string | null) {
+  if (!names?.trim()) {
+    return "Your custom song";
+  }
+
+  const cleaned = names
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean)
+    .join(", ");
+
+  if (!cleaned) {
+    return "Your custom song";
+  }
+
+  const shortened = cleaned.length > 42 ? `${cleaned.slice(0, 39)}...` : cleaned;
+  return `Song about ${shortened}`;
+}
 
 export function VenueSongExperience({
   venue,
@@ -58,8 +80,8 @@ export function VenueSongExperience({
                   <p className="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-accent)]">
                     {song.status}
                   </p>
-                  <p className="mt-3 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-                    {song.generatedPrompt ?? "Custom AI song"}
+                  <p className="mt-3 text-sm font-semibold leading-6 text-[color:var(--color-foreground)]">
+                    {buildSongCardLabel(song.rawInputs?.names)}
                   </p>
                   <p className="mt-4 text-xs text-[color:var(--color-muted-foreground)]">
                     {formatDate(song.completedAt ?? song.updatedAt)}
