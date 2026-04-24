@@ -1,6 +1,14 @@
 import Link from "next/link";
+import { after } from "next/server";
 
-import { getOrderByCheckoutSessionId, getOrderById } from "@/lib/db";
+import {
+  getOrderByCheckoutSessionId,
+  getOrderById,
+  markOrderPaidAndQueued,
+} from "@/lib/db";
+import { drainGenerationQueue } from "@/lib/queue";
+import { songRequestSchema } from "@/lib/schema";
+import { getCheckoutSession, readSongInputFromMetadata } from "@/lib/stripe";
 import { OrderStatusCard } from "@/src/components/public/order-status-card";
 
 type Props = {
@@ -9,12 +17,60 @@ type Props = {
 
 export default async function VenueSuccessPage({ searchParams }: Props) {
   const { session_id: sessionId, order_id: orderId } = await searchParams;
-  const order = sessionId
+  let order = sessionId
     ? await getOrderByCheckoutSessionId(sessionId)
     : orderId
       ? await getOrderById(orderId)
       : null;
-  const wasFree = (order?.amountTotal ?? 0) === 0;
+
+  if (
+    sessionId &&
+    order &&
+    order.status === "checkout_created"
+  ) {
+    try {
+      const session = await getCheckoutSession(sessionId);
+
+      if (
+        session.payment_status === "paid" &&
+        session.metadata?.orderId === order.id
+      ) {
+        const reconstructedInput =
+          readSongInputFromMetadata(session.metadata) ?? order.rawInputs;
+        const rawInputs = songRequestSchema.parse(reconstructedInput);
+
+        await markOrderPaidAndQueued({
+          orderId: order.id,
+          checkoutSessionId: session.id,
+          paymentIntentId:
+            typeof session.payment_intent === "string" ? session.payment_intent : null,
+          amountTotal: session.amount_total,
+          currency: session.currency,
+          metadata: {
+            ...session.metadata,
+            checkoutStatus: session.status,
+            paymentStatus: session.payment_status,
+            reconciledFromSuccessPage: true,
+          },
+          rawInputs,
+        });
+
+        after(async () => {
+          await drainGenerationQueue();
+        });
+
+        order = await getOrderById(order.id);
+      }
+    } catch {
+      // Leave the order as-is and let the polling UI keep checking.
+    }
+  }
+
+  const wasFree =
+    order?.amountTotal === 0 ||
+    order?.checkoutSessionId?.startsWith("free_") ||
+    orderId?.startsWith("free_") ||
+    false;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col justify-center px-4 py-10 sm:px-6">
@@ -40,7 +96,7 @@ export default async function VenueSuccessPage({ searchParams }: Props) {
             Back to home
           </Link>
           <Link
-            href="/sign-in"
+            href="/login"
             className="inline-flex items-center justify-center rounded-full border border-[color:var(--color-line)] px-5 py-3 text-sm font-semibold"
           >
             Venue/Admin sign in

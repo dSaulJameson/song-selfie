@@ -174,3 +174,8 @@ export async function createConnectOnboardingLink(params: {
     url: link.url,
   };
 }
+
+export async function getCheckoutSession(sessionId: string) {
+  const stripe = getStripe();
+  return stripe.checkout.sessions.retrieve(sessionId);
+}
