@@ -4,7 +4,8 @@ import { Hash } from "@smithy/hash-node";
 import { HttpRequest } from "@smithy/protocol-http";
 import { SignatureV4 } from "@smithy/signature-v4";
 
-import { getSesConfig } from "@/lib/env";
+import { getBaseUrl, getSesConfig } from "@/lib/env";
+import { getVenuePublicPath } from "@/lib/system-venues";
 
 function getSesFromEmail() {
   const config = getSesConfig();
@@ -147,4 +148,56 @@ export async function sendSongReadyEmails(params: {
       }),
     ),
   );
+}
+
+export async function sendVenueInviteEmail(params: {
+  to: string;
+  venueName: string;
+  venueSlug: string;
+}) {
+  const venueUrl = `${getBaseUrl()}${getVenuePublicPath(params.venueSlug)}`;
+  const loginUrl = `${getBaseUrl()}/login`;
+
+  await sendRawSesEmail({
+    to: params.to,
+    subject: `Song Selfie invite for ${params.venueName}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #201733;">
+        <h1 style="margin-bottom: 12px;">Your Song Selfie venue is ready</h1>
+        <p>${params.venueName} now has a public guest page and a venue dashboard.</p>
+        <p><strong>Guest page:</strong> <a href="${venueUrl}">${venueUrl}</a></p>
+        <p><strong>Dashboard login:</strong> <a href="${loginUrl}">${loginUrl}</a></p>
+        <p>Sign in with this email to manage pricing, payouts, QR access, and song history.</p>
+      </div>
+    `,
+    text:
+      `Your Song Selfie venue is ready.\n\n` +
+      `Guest page: ${venueUrl}\n` +
+      `Dashboard login: ${loginUrl}\n\n` +
+      `Sign in with this email to manage pricing, payouts, QR access, and song history.`,
+  });
+}
+
+export async function sendForwardedSongEmail(params: {
+  to: string;
+  venueName: string;
+  songUrl: string;
+  title: string;
+  sentByEmail: string;
+}) {
+  await sendRawSesEmail({
+    to: params.to,
+    subject: `${params.venueName} forwarded your Song Selfie track`,
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #201733;">
+        <h1 style="margin-bottom: 12px;">Your Song Selfie link was forwarded</h1>
+        <p>${params.sentByEmail} forwarded <strong>${params.title}</strong> from ${params.venueName}.</p>
+        <p><a href="${params.songUrl}" style="display: inline-block; padding: 12px 18px; background: #ff6b35; color: white; border-radius: 999px; text-decoration: none;">Play your song</a></p>
+      </div>
+    `,
+    text:
+      `Your Song Selfie link was forwarded.\n\n` +
+      `${params.sentByEmail} forwarded ${params.title} from ${params.venueName}.\n\n` +
+      `Play your song: ${params.songUrl}`,
+  });
 }

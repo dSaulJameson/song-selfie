@@ -39,6 +39,22 @@ export async function getVenueSummaries() {
   return listAllVenues();
 }
 
+export function isSystemVenueSlug(slug: string) {
+  return Object.values(SYSTEM_VENUE_SLUGS).includes(slug as (typeof SYSTEM_VENUE_SLUGS)[keyof typeof SYSTEM_VENUE_SLUGS]);
+}
+
+export function getVenuePublicPath(slug: string) {
+  if (slug === SYSTEM_VENUE_SLUGS.rootDemo) {
+    return "/";
+  }
+
+  return `/${slug}`;
+}
+
+export function getVenueSuccessPath(slug: string) {
+  return `/${slug}/success`;
+}
+
 export const SYSTEM_VENUE_SLUGS = {
   rootDemo: ROOT_DEMO_SLUG,
   stripeDemo: STRIPE_DEMO_SLUG,

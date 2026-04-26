@@ -9,6 +9,7 @@ import {
 import { drainGenerationQueue } from "@/lib/queue";
 import { createVenueCheckoutSession } from "@/lib/stripe";
 import { songRequestSchema } from "@/lib/schema";
+import { getVenueSuccessPath } from "@/lib/system-venues";
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -58,7 +59,7 @@ export async function POST(request: Request, { params }: Props) {
       });
 
       return NextResponse.json({
-        url: `/v/${venue.slug}/success?order_id=${draftOrder.id}`,
+        url: `${getVenueSuccessPath(venue.slug)}?order_id=${draftOrder.id}`,
       });
     }
 

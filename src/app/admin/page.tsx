@@ -4,8 +4,8 @@ import QRCode from "qrcode";
 
 import { requireAdminUser } from "@/lib/auth";
 import { listAllOrders, listAllVenues } from "@/lib/db";
-import { getBaseUrl } from "@/lib/env";
-import { ensureSystemVenues } from "@/lib/system-venues";
+import { getBaseUrl, getS3Config } from "@/lib/env";
+import { ensureSystemVenues, getVenuePublicPath, isSystemVenueSlug } from "@/lib/system-venues";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   createVenueAction,
@@ -16,17 +16,17 @@ import {
 export default async function AdminPage() {
   const user = await requireAdminUser();
   await ensureSystemVenues();
+
   const venues = await listAllVenues();
   const orders = await listAllOrders(50);
-  const totalRevenue = orders.reduce(
-    (sum, order) => sum + (order.amountTotal ?? 0),
-    0,
-  );
+  const totalRevenue = orders.reduce((sum, order) => sum + (order.amountTotal ?? 0), 0);
+  const completedSongs = orders.filter((order) => order.status === "completed" && order.songUrl);
   const baseUrl = getBaseUrl();
+  const hasS3Bucket = Boolean(getS3Config().bucket);
+
   const venueCards = await Promise.all(
     venues.map(async (venue) => {
-      const publicUrl =
-        venue.slug === "song-selfie-demo" ? `${baseUrl}/` : `${baseUrl}/v/${venue.slug}`;
+      const publicUrl = `${baseUrl}${getVenuePublicPath(venue.slug)}`;
       const qrCode = await QRCode.toDataURL(publicUrl, {
         width: 180,
         margin: 1,
@@ -36,6 +36,7 @@ export default async function AdminPage() {
         ...venue,
         publicUrl,
         qrCode,
+        isSystemVenue: isSystemVenueSlug(venue.slug),
       };
     }),
   );
@@ -49,13 +50,14 @@ export default async function AdminPage() {
         <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h1 className="text-4xl font-black tracking-tight text-[color:var(--color-foreground)]">
-              Venue network control
+              Song Selfie venue control
             </h1>
             <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-              Signed in as {user.primaryEmailAddress?.emailAddress}.
+              Signed in as {user.primaryEmailAddress?.emailAddress}. Create venue pages,
+              send invite emails, and manage live pricing and splits.
             </p>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-4">
             <div className="rounded-[1.4rem] bg-[color:var(--color-surface)] px-4 py-3">
               <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--color-muted-foreground)]">
                 Venues
@@ -70,6 +72,12 @@ export default async function AdminPage() {
             </div>
             <div className="rounded-[1.4rem] bg-[color:var(--color-surface)] px-4 py-3">
               <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--color-muted-foreground)]">
+                Songs
+              </p>
+              <p className="mt-2 text-2xl font-black">{completedSongs.length}</p>
+            </div>
+            <div className="rounded-[1.4rem] bg-[color:var(--color-surface)] px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--color-muted-foreground)]">
                 Gross
               </p>
               <p className="mt-2 text-2xl font-black">{formatCurrency(totalRevenue)}</p>
@@ -78,31 +86,40 @@ export default async function AdminPage() {
         </div>
       </section>
 
+      {!hasS3Bucket ? (
+        <section className="rounded-[1.8rem] border border-amber-200 bg-amber-50/90 p-5 shadow-[0_12px_30px_rgba(120,53,15,0.08)]">
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-amber-700">
+            Storage setup needed
+          </p>
+          <p className="mt-2 text-sm leading-6 text-amber-900">
+            S3 bucket settings are not configured yet, so completed songs may still fall back
+            to provider-hosted audio links. Once you add the bucket, Song Selfie can white-label
+            every playback link.
+          </p>
+        </section>
+      ) : null}
+
       <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
         <form
           action={createVenueAction}
           className="rounded-[2rem] border border-[color:var(--color-line)] bg-white/86 p-6 shadow-[0_18px_44px_rgba(22,12,46,0.08)]"
         >
           <p className="text-xs font-bold uppercase tracking-[0.28em] text-[color:var(--color-accent)]">
-            New venue
+            Invite venue
           </p>
-          <h2 className="mt-3 text-2xl font-black">Create a scannable location</h2>
+          <h2 className="mt-3 text-2xl font-black">Launch a new venue page</h2>
           <div className="mt-5 grid gap-4">
             {[
-              ["name", "Venue name", "Neon Disco Lounge"],
-              ["slug", "Public slug", "neon-disco-lounge"],
+              ["name", "Venue name", "Enzo's Barbecue"],
+              ["slug", "Venue page path", "enzos-barbecue"],
               [
                 "description",
                 "Description",
-                "Late-night room with birthday tables and bottle service",
+                "House-smoked barbecue, birthdays, and group tables all night",
               ],
-              [
-                "contactEmail",
-                "Invited venue email",
-                "venue-owner@example.com",
-              ],
-              ["priceCents", "Song price (cents)", "0"],
-              ["venueSharePercent", "Venue share %", "70"],
+              ["contactEmail", "Venue email", "hello@enzosbarbecue.com"],
+              ["priceCents", "Starting song price (cents)", "100"],
+              ["venueSharePercent", "Venue revenue share %", "70"],
             ].map(([name, label, placeholder]) => (
               <label key={name} className="grid gap-2 text-sm">
                 <span className="font-semibold text-[color:var(--color-foreground)]">
@@ -120,13 +137,12 @@ export default async function AdminPage() {
                   <input
                     name={name}
                     placeholder={placeholder}
-                    defaultValue={
-                      name === "venueSharePercent"
-                        ? "70"
-                        : typeof placeholder === "string"
-                          ? placeholder
-                          : undefined
+                    defaultValue={typeof placeholder === "string" ? placeholder : undefined}
+                    type={
+                      name === "priceCents" || name === "venueSharePercent" ? "number" : "text"
                     }
+                    min={name === "priceCents" ? 100 : name === "venueSharePercent" ? 0 : undefined}
+                    max={name === "venueSharePercent" ? 100 : undefined}
                     className="h-12 rounded-[1.4rem] border border-[color:var(--color-line)] bg-white px-4"
                     required
                   />
@@ -134,16 +150,25 @@ export default async function AdminPage() {
               </label>
             ))}
           </div>
-          <p className="mt-4 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-            The invited venue email becomes the dashboard access key. Once that person logs in
-            at <span className="font-mono text-xs">{baseUrl}/login</span>, they&apos;ll be
-            routed into their venue dashboard automatically.
+          <p className="mt-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+            Example: <span className="font-mono">songselfie.com/enzos-barbecue</span>. Real
+            venue pages should start at a minimum of $1.00 per song.
           </p>
+          <div className="mt-4 rounded-[1.3rem] bg-[color:var(--color-surface)] px-4 py-4">
+            <p className="text-sm font-semibold text-[color:var(--color-foreground)]">
+              Invite flow
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+              We&apos;ll create the public page, reserve the slug, and send the venue an email
+              with their guest URL and dashboard login at{" "}
+              <span className="font-mono text-xs">{baseUrl}/login</span>.
+            </p>
+          </div>
           <button
             type="submit"
             className="mt-5 inline-flex rounded-full bg-[linear-gradient(135deg,var(--color-accent),var(--color-accent-strong))] px-5 py-3 text-sm font-semibold text-white"
           >
-            Create venue
+            Create venue and send invite
           </button>
         </form>
 
@@ -151,117 +176,109 @@ export default async function AdminPage() {
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.28em] text-[color:var(--color-accent)]">
-                Venues
+                Venue pages
               </p>
-              <h2 className="mt-3 text-2xl font-black">Revenue splits and links</h2>
+              <h2 className="mt-3 text-2xl font-black">Links, QR codes, and pricing</h2>
             </div>
             <Link href="/stripe-demo" className="text-sm font-semibold text-[color:var(--color-accent)]">
               Open Stripe demo
             </Link>
           </div>
           <div className="mt-5 space-y-4">
-            {venueCards.length === 0 ? (
-              <p className="rounded-[1.4rem] bg-[color:var(--color-surface)] px-4 py-5 text-sm text-[color:var(--color-muted-foreground)]">
-                No venues yet. Create your first venue to generate QR codes and public pages.
-              </p>
-            ) : (
-              venueCards.map((venue) => (
-                <article
-                  key={venue.id}
-                  className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-[color:var(--color-card)] p-4"
-                >
-                  <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="flex flex-col gap-4 sm:flex-row">
-                      <Image
-                        src={venue.qrCode}
-                        alt={`QR code for ${venue.name}`}
-                        width={132}
-                        height={132}
-                        className="h-32 w-32 rounded-[1.4rem] border border-[color:var(--color-line)] bg-white p-2"
-                      />
-                      <div className="space-y-2">
+            {venueCards.map((venue) => (
+              <article
+                key={venue.id}
+                className="rounded-[1.5rem] border border-[color:var(--color-line)] bg-[color:var(--color-card)] p-4"
+              >
+                <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="flex flex-col gap-4 sm:flex-row">
+                    <Image
+                      src={venue.qrCode}
+                      alt={`QR code for ${venue.name}`}
+                      width={132}
+                      height={132}
+                      className="h-32 w-32 rounded-[1.4rem] border border-[color:var(--color-line)] bg-white p-2"
+                    />
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <h3 className="text-xl font-black">{venue.name}</h3>
-                        <p className="text-sm text-[color:var(--color-muted-foreground)]">
-                          {venue.description || "No venue description yet."}
-                        </p>
-                        <p className="text-sm">
-                          <span className="font-semibold">Invited email:</span>{" "}
-                          {venue.contactEmail}
-                        </p>
-                        <a
-                          href={venue.publicUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="block font-mono text-xs text-[color:var(--color-accent)]"
-                        >
-                          {venue.publicUrl}
-                        </a>
-                        <div className="flex flex-wrap gap-3 pt-1">
-                          <a
-                            href={venue.publicUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex rounded-full border border-[color:var(--color-line)] px-4 py-2 text-sm font-semibold"
-                          >
-                            Open public page
-                          </a>
-                          <Link
-                            href="/venue"
-                            className="inline-flex rounded-full border border-[color:var(--color-line)] px-4 py-2 text-sm font-semibold"
-                          >
-                            Open venue dashboard
-                          </Link>
-                        </div>
+                        {venue.isSystemVenue ? (
+                          <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-700">
+                            System demo
+                          </span>
+                        ) : null}
                       </div>
-                    </div>
-                    <div className="flex flex-col gap-3 xl:min-w-[260px]">
-                      <form action={updateVenuePricingAction} className="flex flex-col gap-2">
-                        <input type="hidden" name="venueId" value={venue.id} />
-                        <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--color-muted-foreground)]">
-                          Venue price
-                        </label>
-                        <div className="flex items-center gap-2">
-                          <input
-                            name="priceCents"
-                            defaultValue={venue.priceCents}
-                            className="h-11 w-28 rounded-full border border-[color:var(--color-line)] px-4"
-                          />
-                          <button
-                            type="submit"
-                            className="rounded-full border border-[color:var(--color-line)] px-4 py-2 text-sm font-semibold"
-                          >
-                            Save
-                          </button>
-                        </div>
-                      </form>
-                      <form action={updateVenueShareAction} className="flex flex-col gap-2">
-                        <input type="hidden" name="venueId" value={venue.id} />
-                        <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--color-muted-foreground)]">
-                          Venue share %
-                        </label>
-                        <div className="flex items-center gap-2">
-                          <input
-                            name="venueSharePercent"
-                            defaultValue={venue.venueSharePercent}
-                            className="h-11 w-24 rounded-full border border-[color:var(--color-line)] px-4"
-                          />
-                          <button
-                            type="submit"
-                            className="rounded-full border border-[color:var(--color-line)] px-4 py-2 text-sm font-semibold"
-                          >
-                            Save
-                          </button>
-                        </div>
-                      </form>
-                      <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">
-                        Default split is 70% venue / 30% Song Selfie. If Stripe Connect is not
-                        onboarded yet, all revenue lands on the platform until payouts are enabled.
+                      <p className="text-sm text-[color:var(--color-muted-foreground)]">
+                        {venue.description || "No venue description yet."}
                       </p>
+                      <p className="text-sm">
+                        <span className="font-semibold">Venue email:</span> {venue.contactEmail}
+                      </p>
+                      <p className="text-sm">
+                        <span className="font-semibold">Page slug:</span> {venue.slug}
+                      </p>
+                      <a
+                        href={venue.publicUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block font-mono text-xs text-[color:var(--color-accent)]"
+                      >
+                        {venue.publicUrl}
+                      </a>
                     </div>
                   </div>
-                </article>
-              ))
-            )}
+
+                  <div className="flex flex-col gap-3 xl:min-w-[280px]">
+                    <form action={updateVenuePricingAction} className="flex flex-col gap-2">
+                      <input type="hidden" name="venueId" value={venue.id} />
+                      <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--color-muted-foreground)]">
+                        Admin price override
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          name="priceCents"
+                          type="number"
+                          min={venue.isSystemVenue ? 0 : 100}
+                          defaultValue={venue.priceCents}
+                          className="h-11 w-28 rounded-full border border-[color:var(--color-line)] px-4"
+                        />
+                        <button
+                          type="submit"
+                          className="rounded-full border border-[color:var(--color-line)] px-4 py-2 text-sm font-semibold"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </form>
+
+                    <form action={updateVenueShareAction} className="flex flex-col gap-2">
+                      <input type="hidden" name="venueId" value={venue.id} />
+                      <label className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--color-muted-foreground)]">
+                        Venue share %
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          name="venueSharePercent"
+                          defaultValue={venue.venueSharePercent}
+                          className="h-11 w-24 rounded-full border border-[color:var(--color-line)] px-4"
+                        />
+                        <button
+                          type="submit"
+                          className="rounded-full border border-[color:var(--color-line)] px-4 py-2 text-sm font-semibold"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </form>
+
+                    <p className="text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+                      Real venues should usually start at $1.00 minimum. Stripe Connect splits
+                      default to 70% venue / 30% Song Selfie.
+                    </p>
+                  </div>
+                </div>
+              </article>
+            ))}
           </div>
         </section>
       </section>

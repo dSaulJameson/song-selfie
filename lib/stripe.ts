@@ -2,6 +2,7 @@ import Stripe from "stripe";
 
 import type { SongRequestInput } from "@/lib/schema";
 import { getBaseUrl, getStripeConfig } from "@/lib/env";
+import { getVenuePublicPath, getVenueSuccessPath } from "@/lib/system-venues";
 import { chunkString, safeJsonParse } from "@/lib/utils";
 
 let stripeClient: Stripe | null = null;
@@ -86,8 +87,8 @@ export async function createVenueCheckoutSession(params: {
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     allow_promotion_codes: true,
-    success_url: `${baseUrl}/v/${params.venue.slug}/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${baseUrl}/v/${params.venue.slug}`,
+    success_url: `${baseUrl}${getVenueSuccessPath(params.venue.slug)}?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${baseUrl}${getVenuePublicPath(params.venue.slug)}`,
     customer_email: params.input.email,
     metadata,
     line_items: [
