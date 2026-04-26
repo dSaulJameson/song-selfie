@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRight, ChevronDown, Loader2, Lock, Mail, Sparkles } from "lucide-react";
-import { startTransition, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 
 import type {
   FormField,
@@ -62,12 +62,10 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
     field: T,
     value: SongRequestInput[T],
   ) => {
-    startTransition(() => {
-      setForm((current) => ({
-        ...current,
-        [field]: value,
-      }));
-    });
+    setForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
   };
 
   async function handleSubmit() {

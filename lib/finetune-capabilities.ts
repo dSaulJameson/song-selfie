@@ -104,6 +104,13 @@ const GENRE_OPTIONS: FormOption[] = [
   { value: GENRE_VALUES[8], label: "Lo-fi" },
   { value: GENRE_VALUES[9], label: "House" },
   { value: GENRE_VALUES[10], label: "Jazz funk" },
+  { value: GENRE_VALUES[11], label: "Reggae" },
+  { value: GENRE_VALUES[12], label: "Metal" },
+  { value: GENRE_VALUES[13], label: "Emo" },
+  { value: GENRE_VALUES[14], label: "Screamo" },
+  { value: GENRE_VALUES[15], label: "70s throwback" },
+  { value: GENRE_VALUES[16], label: "80s throwback" },
+  { value: GENRE_VALUES[17], label: "90s throwback" },
 ];
 
 const STRUCTURE_OPTIONS: FormOption[] = [

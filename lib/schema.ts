@@ -30,6 +30,13 @@ export const GENRE_VALUES = [
   "lo-fi",
   "house",
   "jazz-funk",
+  "reggae",
+  "metal",
+  "emo",
+  "screamo",
+  "70s-throwback",
+  "80s-throwback",
+  "90s-throwback",
 ] as const;
 
 export const STRUCTURE_VALUES = [
