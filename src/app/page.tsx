@@ -1,11 +1,11 @@
 import { listRecentCompletedOrdersForVenue } from "@/lib/db";
-import { ensureRootDemoVenue } from "@/lib/system-venues";
+import { ensureStripeDemoVenue } from "@/lib/system-venues";
 import { VenueSongExperience } from "@/src/components/public/venue-song-experience";
 
 export default async function Home() {
-  const venue = await ensureRootDemoVenue();
+  const venue = await ensureStripeDemoVenue();
 
   const recentSongs = await listRecentCompletedOrdersForVenue(venue.id, 4);
 
-  return <VenueSongExperience venue={venue} recentSongs={recentSongs} />;
+  return <VenueSongExperience venue={venue} recentSongs={recentSongs} mode="paid-home" />;
 }

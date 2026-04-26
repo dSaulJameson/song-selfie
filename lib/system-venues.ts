@@ -10,9 +10,9 @@ function getSystemContactEmail() {
 
 export async function ensureRootDemoVenue() {
   return upsertVenueRecord({
-    name: "Song Selfie Demo",
+    name: "Song Selfie Testing",
     slug: ROOT_DEMO_SLUG,
-    description: "Create a demo song in seconds with the live Song Selfie guest flow.",
+    description: "Private free-testing page for internal Song Selfie feedback and QA.",
     contactEmail: getSystemContactEmail(),
     priceCents: 0,
     venueSharePercent: 70,
@@ -21,9 +21,10 @@ export async function ensureRootDemoVenue() {
 
 export async function ensureStripeDemoVenue() {
   return upsertVenueRecord({
-    name: "Stripe Demo",
+    name: "Song Selfie",
     slug: STRIPE_DEMO_SLUG,
-    description: "Test the paid Song Selfie checkout flow for $1 before generation starts.",
+    description:
+      "Custom songs for tables, birthdays, and moments worth replaying. Secure Stripe checkout before generation starts.",
     contactEmail: getSystemContactEmail(),
     priceCents: 100,
     venueSharePercent: 0,
@@ -44,14 +45,26 @@ export function isSystemVenueSlug(slug: string) {
 }
 
 export function getVenuePublicPath(slug: string) {
-  if (slug === SYSTEM_VENUE_SLUGS.rootDemo) {
+  if (slug === SYSTEM_VENUE_SLUGS.stripeDemo) {
     return "/";
+  }
+
+  if (slug === SYSTEM_VENUE_SLUGS.rootDemo) {
+    return "/testing";
   }
 
   return `/${slug}`;
 }
 
 export function getVenueSuccessPath(slug: string) {
+  if (slug === SYSTEM_VENUE_SLUGS.stripeDemo) {
+    return "/success";
+  }
+
+  if (slug === SYSTEM_VENUE_SLUGS.rootDemo) {
+    return "/testing/success";
+  }
+
   return `/${slug}/success`;
 }
 

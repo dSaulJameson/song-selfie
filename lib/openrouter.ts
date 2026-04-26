@@ -163,7 +163,7 @@ export async function generateSongPacket(
         {
           role: "system",
           content:
-            "You write production-ready lyric packets for a music generation API. Return valid JSON only. The JSON must include title, tags, lyrics, and optional contentProfile. Keep title under 80 characters. Keep tags under 500 characters and make them a concise comma-separated production brief for a music model, not prose. Keep lyrics under 2000 characters as plain text with bracketed section headers such as [Verse 1], [Chorus], and [Bridge]. Match the requested language. Do not wrap the JSON in markdown.",
+            "You write production-ready lyric packets for a music generation API. Return valid JSON only. The JSON must include title, tags, lyrics, and optional contentProfile. Keep title under 80 characters. Keep tags under 500 characters and make them a concise comma-separated production brief for a music model, not prose. Make the requested genre unmistakable by using concrete production language and sonic anchors instead of generic labels. Keep lyrics under 2000 characters as plain text with bracketed section headers such as [Verse 1], [Chorus], and [Bridge]. Match the requested language. Do not wrap the JSON in markdown.",
         },
         {
           role: "user",

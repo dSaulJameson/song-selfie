@@ -1,4 +1,5 @@
 import { after, NextResponse } from "next/server";
+import { ZodError } from "zod";
 
 import {
   createDraftOrder,
@@ -16,6 +17,22 @@ type Props = {
 };
 
 export const runtime = "nodejs";
+
+function getCheckoutErrorMessage(error: unknown) {
+  if (error instanceof ZodError) {
+    if (error.issues.some((issue) => issue.path[0] === "email")) {
+      return "Please put in your email so we know where to send the song.";
+    }
+
+    if (error.issues.some((issue) => issue.path[0] === "names")) {
+      return "Tell us who the song is about first.";
+    }
+
+    return "Please double-check the song form and try again.";
+  }
+
+  return error instanceof Error ? error.message : "Could not create checkout session.";
+}
 
 export async function POST(request: Request, { params }: Props) {
   const { slug } = await params;
@@ -82,8 +99,7 @@ export async function POST(request: Request, { params }: Props) {
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Could not create checkout session.";
+    const message = getCheckoutErrorMessage(error);
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }

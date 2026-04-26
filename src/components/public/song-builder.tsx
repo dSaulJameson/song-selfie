@@ -22,6 +22,7 @@ type SongBuilderProps = {
     priceCents: number;
   };
   capabilities: Capabilities;
+  mode?: "venue" | "paid-home" | "free-testing";
 };
 
 function money(amountInCents: number) {
@@ -41,7 +42,11 @@ function getOptions(field: FormField) {
   return field.options ?? [];
 }
 
-export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
+export function SongBuilder({
+  venue,
+  capabilities,
+  mode = "venue",
+}: SongBuilderProps) {
   const [form, setForm] = useState<SongRequestInput>(capabilities.defaults);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startSubmit] = useTransition();
@@ -57,6 +62,98 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
   const durationField = getField(capabilities, "duration");
   const energyField = getField(capabilities, "energy");
   const mentionVenueField = getField(capabilities, "mentionVenueName");
+  const isPaidHome = mode === "paid-home";
+  const isFreeTesting = mode === "free-testing";
+
+  const heroEyebrow = isPaidHome
+    ? "Paid Song Selfie checkout"
+    : isFreeTesting
+      ? "Private free testing"
+      : venue.name;
+  const heroTitle = isPaidHome
+    ? "Make a soundtrack for the memory."
+    : isFreeTesting
+      ? "Build free test songs before launch."
+      : "Let's make your song";
+  const heroDescription = isPaidHome
+    ? "Answer a few questions, complete a secure Stripe checkout, and we'll generate a custom song for your table and email it when it's ready."
+    : isFreeTesting
+      ? "This page is password-protected for internal testing. Use it to test free songs, email delivery, and generation quality before wider launch."
+      : `Answer a few quick questions and we'll build a custom song for this moment. ${
+          venue.description ?? "Selfies make the memory. Songs make the soundtrack."
+        }`;
+  const checkoutLabel = isPaidHome
+    ? "Today: $1"
+    : isFreeTesting
+      ? "Free with testing access"
+      : venue.priceCents === 0
+        ? "Free today for testing"
+        : money(venue.priceCents);
+  const checkoutCaption = isPaidHome
+    ? "Songs are normally $10. They're 90% off while testing, and guests complete a secure Stripe checkout before we generate anything."
+    : isFreeTesting
+      ? "Unlocked for free testing only. This bypasses the paid launch flow so we can QA the song experience."
+      : venue.priceCents === 0
+        ? "Guests normally review and pay in Stripe before generation starts."
+        : "Guests complete a secure Stripe checkout before we generate the song.";
+  const primaryButtonLabel = isPaidHome
+    ? "Continue to $1 checkout"
+    : isFreeTesting
+      ? "Create free test song"
+      : venue.priceCents === 0
+        ? "Create my song"
+        : "Continue to payment";
+  const paymentFootnote = isPaidHome
+    ? "You will review and pay in secure Stripe checkout before we create your song."
+    : isFreeTesting
+      ? "Free internal testing only. The live launch flow uses secure Stripe checkout before generation."
+      : venue.priceCents === 0
+        ? "Free today for testing. Guests normally review and pay before we start generation."
+        : "You will review and pay before we create your song.";
+  const features = isPaidHome
+    ? [
+        {
+          title: "Secure Stripe checkout",
+          copy: "Payment happens first, then generation starts.",
+        },
+        {
+          title: "Custom AI lyrics",
+          copy: "Written for your table, story, and names.",
+        },
+        {
+          title: "Delivered by email",
+          copy: "The finished song lands in your inbox fast.",
+        },
+      ]
+    : isFreeTesting
+      ? [
+          {
+            title: "Private testing page",
+            copy: "Password-gated so only testers can get in.",
+          },
+          {
+            title: "Free QA generation",
+            copy: "Useful for checking prompt quality and flow.",
+          },
+          {
+            title: "Delivered to you",
+            copy: "Email link as soon as it is ready.",
+          },
+        ]
+      : [
+          {
+            title: "Custom AI lyrics",
+            copy: "Written just for your moment.",
+          },
+          {
+            title: "Duration-aware writing",
+            copy: "Shorter songs now get tighter lyric packets.",
+          },
+          {
+            title: "Delivered to you",
+            copy: "Email link as soon as it is ready.",
+          },
+        ];
 
   const updateField = <T extends keyof SongRequestInput>(
     field: T,
@@ -70,6 +167,23 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
 
   async function handleSubmit() {
     setError(null);
+
+    if (form.names.trim().length < 2) {
+      setError("Tell us who the song is about first.");
+      return;
+    }
+
+    const normalizedEmail = form.email.trim();
+    if (!normalizedEmail) {
+      setError("Please put in your email so we know where to send the song.");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setError("Please put in a valid email so we know where to send the song.");
+      return;
+    }
+
     startSubmit(async () => {
       const response = await fetch(`/api/venues/${venue.slug}/checkout`, {
         method: "POST",
@@ -98,17 +212,23 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
             <div className="space-y-4">
               <SongSelfieLogo />
               <div className="space-y-2">
+                <p className="inline-flex rounded-full border border-fuchsia-100 bg-fuchsia-50 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-fuchsia-600">
+                  {heroEyebrow}
+                </p>
                 <p className="text-lg text-slate-500 sm:text-xl">
                   Song Selfies are the soundtrack to your memories.
                 </p>
                 <h1 className="text-4xl font-black tracking-tight text-slate-950 sm:text-5xl">
-                  Let&apos;s make <span className="text-fuchsia-500">your</span> song
+                  {heroTitle.includes("your") ? (
+                    <>
+                      Let&apos;s make <span className="text-fuchsia-500">your</span> song
+                    </>
+                  ) : (
+                    heroTitle
+                  )}
                 </h1>
                 <p className="max-w-2xl text-base leading-7 text-slate-500 sm:text-lg">
-                  Answer a few quick questions and we&apos;ll build a custom song for this
-                  moment.{" "}
-                  {venue.description ??
-                    "Selfies make the memory. Songs make the soundtrack."}
+                  {heroDescription}
                 </p>
               </div>
             </div>
@@ -118,12 +238,13 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
                 Checkout
               </p>
               <p className="mt-2 text-lg font-black text-slate-950">
-                {venue.priceCents === 0 ? "Free today for testing" : money(venue.priceCents)}
+                {checkoutLabel}
               </p>
+              {isPaidHome ? (
+                <p className="mt-1 text-sm font-semibold text-slate-400 line-through">$10 usual price</p>
+              ) : null}
               <p className="mt-2 text-sm leading-6 text-slate-500">
-                {venue.priceCents === 0
-                  ? "Guests normally review and pay in Stripe before generation starts."
-                  : "Guests complete a secure Stripe checkout before we generate the song."}
+                {checkoutCaption}
               </p>
             </div>
           </div>
@@ -480,7 +601,7 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
                 ) : (
                   <>
                     <Sparkles className="mr-2 h-5 w-5" />
-                    {venue.priceCents === 0 ? "Create my song" : "Continue to payment"}
+                    {primaryButtonLabel}
                     <ArrowRight className="ml-2 h-5 w-5" />
                   </>
                 )}
@@ -489,30 +610,15 @@ export function SongBuilder({ venue, capabilities }: SongBuilderProps) {
               <div className="mt-4 space-y-2 text-center">
                 <p className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
                   <Lock className="h-4 w-4 text-violet-500" />
-                  Secure payment powered by Stripe
+                  {isFreeTesting ? "Testing mode unlocked" : "Secure payment powered by Stripe"}
                 </p>
                 <p className="text-sm text-slate-500">
-                  {venue.priceCents === 0
-                    ? "Free today for testing. Guests normally review and pay before we start generation."
-                    : "You will review and pay before we create your song."}
+                  {paymentFootnote}
                 </p>
               </div>
 
               <div className="mt-5 grid gap-3 rounded-[1.4rem] border border-slate-200 bg-white p-4 md:grid-cols-3">
-                {[
-                  {
-                    title: "Custom AI lyrics",
-                    copy: "Written just for your moment.",
-                  },
-                  {
-                    title: "Duration-aware writing",
-                    copy: "Shorter songs now get tighter lyric packets.",
-                  },
-                  {
-                    title: "Delivered to you",
-                    copy: "Email link as soon as it is ready.",
-                  },
-                ].map((feature) => (
+                {features.map((feature) => (
                   <div key={feature.title} className="text-center md:text-left">
                     <p className="text-sm font-semibold text-slate-900">{feature.title}</p>
                     <p className="mt-1 text-sm text-slate-500">{feature.copy}</p>
