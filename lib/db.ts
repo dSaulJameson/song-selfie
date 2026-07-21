@@ -16,6 +16,11 @@ export type VenueRecord = {
   stripePayoutsEnabled: boolean;
   venueSharePercent: number;
   priceCents: number;
+  allowExplicitContent: boolean;
+  allowKidsMode: boolean;
+  payoutMethod: string | null;
+  payoutDetails: Record<string, unknown> | null;
+  payoutUpdatedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -27,6 +32,8 @@ export type UpsertVenueInput = {
   contactEmail: string;
   priceCents: number;
   venueSharePercent: number;
+  allowExplicitContent?: boolean;
+  allowKidsMode?: boolean;
   ownerClerkUserId?: string;
 };
 
@@ -97,14 +104,29 @@ function normalizeOrderRecords(records: SongOrderRecord[]) {
 
 function getSql() {
   if (!sqlClient) {
-    sqlClient = postgres(getDatabaseUrl(), {
-      ssl: "require",
+    const databaseUrl = getDatabaseUrl();
+    const databaseHost = new URL(databaseUrl).hostname.toLowerCase();
+    const useSsl = ![
+      "hosthatch-postgres",
+      "localhost",
+      "127.0.0.1",
+      "::1",
+    ].includes(databaseHost);
+
+    sqlClient = postgres(databaseUrl, {
+      ssl: useSsl ? "require" : false,
       max: 5,
       idle_timeout: 20,
     });
   }
 
   return sqlClient;
+}
+
+export async function checkDatabaseConnection() {
+  const sql = getSql();
+  const rows = await sql.unsafe<{ ok: number }[]>("select 1 as ok");
+  return rows[0]?.ok === 1;
 }
 
 function mapVenueColumns() {
@@ -120,6 +142,11 @@ function mapVenueColumns() {
     stripe_payouts_enabled as "stripePayoutsEnabled",
     venue_share_percent as "venueSharePercent",
     price_cents as "priceCents",
+    allow_explicit_content as "allowExplicitContent",
+    allow_kids_mode as "allowKidsMode",
+    payout_method as "payoutMethod",
+    payout_details as "payoutDetails",
+    payout_updated_at as "payoutUpdatedAt",
     created_at as "createdAt",
     updated_at as "updatedAt"
   `;
@@ -170,6 +197,11 @@ export async function ensureDatabase() {
           stripe_payouts_enabled boolean not null default false,
           venue_share_percent integer not null default 70 check (venue_share_percent between 0 and 100),
           price_cents integer not null default 2500 check (price_cents >= 0),
+          allow_explicit_content boolean not null default true,
+          allow_kids_mode boolean not null default false,
+          payout_method text,
+          payout_details jsonb,
+          payout_updated_at timestamptz,
           created_at timestamptz not null default now(),
           updated_at timestamptz not null default now()
         );
@@ -236,6 +268,24 @@ export async function ensureDatabase() {
         alter table venues
         add constraint venues_venue_share_percent_check
         check (venue_share_percent between 0 and 100);
+
+        alter table venues
+        add column if not exists allow_explicit_content boolean not null default true;
+
+        alter table venues
+        add column if not exists allow_kids_mode boolean not null default true;
+
+        alter table venues
+        alter column allow_kids_mode set default false;
+
+        alter table venues
+        add column if not exists payout_method text;
+
+        alter table venues
+        add column if not exists payout_details jsonb;
+
+        alter table venues
+        add column if not exists payout_updated_at timestamptz;
       `);
     })();
   }
@@ -294,6 +344,38 @@ export async function getVenueBySlug(slug: string) {
   return rows[0] ?? null;
 }
 
+export async function renameVenueSlugIfAvailable(params: {
+  oldSlug: string;
+  newSlug: string;
+  name?: string;
+}) {
+  await ensureDatabase();
+  const sql = getSql();
+  const normalizedOldSlug = slugify(params.oldSlug);
+  const normalizedNewSlug = slugify(params.newSlug);
+
+  if (!normalizedOldSlug || !normalizedNewSlug || normalizedOldSlug === normalizedNewSlug) {
+    return null;
+  }
+
+  const rows = await sql.unsafe<VenueRecord[]>(
+    `
+      update venues
+      set slug = $2,
+          name = case when $3::text is null then name else $3::text end,
+          updated_at = now()
+      where slug = $1
+        and not exists (
+          select 1 from venues existing where existing.slug = $2
+        )
+      returning ${mapVenueColumns()}
+    `,
+    [normalizedOldSlug, normalizedNewSlug, params.name ?? null],
+  );
+
+  return rows[0] ?? null;
+}
+
 export async function createVenueRecord(input: UpsertVenueInput) {
   await ensureDatabase();
   const sql = getSql();
@@ -313,9 +395,11 @@ export async function createVenueRecord(input: UpsertVenueInput) {
         owner_clerk_user_id,
         contact_email,
         price_cents,
-        venue_share_percent
+        venue_share_percent,
+        allow_explicit_content,
+        allow_kids_mode
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       returning ${mapVenueColumns()}
     `,
     [
@@ -327,10 +411,46 @@ export async function createVenueRecord(input: UpsertVenueInput) {
       normalizedEmail,
       input.priceCents,
       input.venueSharePercent,
+      input.allowExplicitContent ?? true,
+      input.allowKidsMode ?? false,
     ],
   );
 
   return rows[0];
+}
+
+export async function createSelfServeVenueRecord(input: {
+  name: string;
+  contactEmail: string;
+  description?: string;
+  priceCents?: number;
+  venueSharePercent?: number;
+  allowExplicitContent?: boolean;
+  allowKidsMode?: boolean;
+}) {
+  await ensureDatabase();
+  const baseSlug = (slugify(input.name) || "venue").slice(0, 56);
+  let slug = baseSlug;
+
+  for (let suffix = 2; suffix < 1000; suffix += 1) {
+    const existing = await getVenueBySlug(slug);
+    if (!existing) {
+      break;
+    }
+
+    slug = `${baseSlug}-${suffix}`.slice(0, 64);
+  }
+
+  return createVenueRecord({
+    name: input.name,
+    slug,
+    description: input.description ?? "Song Selfie venue page",
+    contactEmail: input.contactEmail,
+    priceCents: input.priceCents ?? 100,
+    venueSharePercent: input.venueSharePercent ?? 70,
+    allowExplicitContent: input.allowExplicitContent ?? true,
+    allowKidsMode: input.allowKidsMode ?? false,
+  });
 }
 
 export async function upsertVenueRecord(input: UpsertVenueInput) {
@@ -351,9 +471,11 @@ export async function upsertVenueRecord(input: UpsertVenueInput) {
         owner_clerk_user_id,
         contact_email,
         price_cents,
-        venue_share_percent
+        venue_share_percent,
+        allow_explicit_content,
+        allow_kids_mode
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       on conflict (slug) do update
       set name = excluded.name,
           description = excluded.description,
@@ -361,6 +483,8 @@ export async function upsertVenueRecord(input: UpsertVenueInput) {
           contact_email = excluded.contact_email,
           price_cents = excluded.price_cents,
           venue_share_percent = excluded.venue_share_percent,
+          allow_explicit_content = excluded.allow_explicit_content,
+          allow_kids_mode = excluded.allow_kids_mode,
           updated_at = now()
       returning ${mapVenueColumns()}
     `,
@@ -373,6 +497,8 @@ export async function upsertVenueRecord(input: UpsertVenueInput) {
       normalizedEmail,
       input.priceCents,
       input.venueSharePercent,
+      input.allowExplicitContent ?? true,
+      input.allowKidsMode ?? false,
     ],
   );
 
@@ -402,6 +528,45 @@ export async function updateVenuePrice(venueId: string, priceCents: number) {
       where id = $1
     `,
     [venueId, priceCents],
+  );
+}
+
+export async function updateVenueContentSettings(params: {
+  venueId: string;
+  allowExplicitContent: boolean;
+  allowKidsMode: boolean;
+}) {
+  await ensureDatabase();
+  const sql = getSql();
+  await sql.unsafe(
+    `
+      update venues
+      set allow_explicit_content = $2,
+          allow_kids_mode = $3,
+          updated_at = now()
+      where id = $1
+    `,
+    [params.venueId, params.allowExplicitContent, params.allowKidsMode],
+  );
+}
+
+export async function updateVenuePayoutDetails(params: {
+  venueId: string;
+  payoutMethod: "bank-transfer" | "check";
+  payoutDetails: Record<string, unknown>;
+}) {
+  await ensureDatabase();
+  const sql = getSql();
+  await sql.unsafe(
+    `
+      update venues
+      set payout_method = $2,
+          payout_details = $3::jsonb,
+          payout_updated_at = now(),
+          updated_at = now()
+      where id = $1
+    `,
+    [params.venueId, params.payoutMethod, JSON.stringify(params.payoutDetails)],
   );
 }
 
@@ -549,6 +714,48 @@ export async function countProcessingOrders() {
   return Number(rows[0]?.count ?? 0);
 }
 
+export async function listStaleProcessingOrders(params?: {
+  olderThanMinutes?: number;
+  limit?: number;
+}) {
+  await ensureDatabase();
+  const sql = getSql();
+  const olderThanMinutes = Math.max(1, params?.olderThanMinutes ?? 5);
+  const limit = Math.max(1, params?.limit ?? 20);
+  const rows = await sql.unsafe<SongOrderRecord[]>(
+    `
+      select ${mapOrderColumns()}
+      from song_orders
+      where status = 'processing'
+        and updated_at < now() - make_interval(mins => $1)
+      order by updated_at asc
+      limit $2
+    `,
+    [olderThanMinutes, limit],
+  );
+
+  return normalizeOrderRecords(rows);
+}
+
+export async function listCompletedOrdersMissingEmail(limit = 20) {
+  await ensureDatabase();
+  const sql = getSql();
+  const rows = await sql.unsafe<SongOrderRecord[]>(
+    `
+      select ${mapOrderColumns()}
+      from song_orders
+      where status = 'completed'
+        and emailed_at is null
+        and song_url is not null
+      order by completed_at asc nulls last, updated_at asc
+      limit $1
+    `,
+    [Math.max(1, limit)],
+  );
+
+  return normalizeOrderRecords(rows);
+}
+
 export async function tryAcquireQueueLock(lockId: number) {
   await ensureDatabase();
   const sql = getSql();
@@ -589,6 +796,26 @@ export async function claimQueuedOrders(limit: number) {
   );
 
   return normalizeOrderRecords(rows);
+}
+
+export async function requeueProcessingOrderWithoutGeneration(orderId: string) {
+  await ensureDatabase();
+  const sql = getSql();
+  await sql.unsafe(
+    `
+      update song_orders
+      set status = 'queued',
+          generated_prompt = null,
+          finetune_generation_id = null,
+          finetune_request = null,
+          error_message = null,
+          updated_at = now()
+      where id = $1
+        and status = 'processing'
+        and finetune_generation_id is null
+    `,
+    [orderId],
+  );
 }
 
 export async function updateOrderGenerationState(params: {
@@ -659,6 +886,23 @@ export async function markOrderEmailed(orderId: string) {
   );
 }
 
+export async function mergeOrderMetadata(
+  orderId: string,
+  patch: Record<string, unknown>,
+) {
+  await ensureDatabase();
+  const sql = getSql();
+  await sql.unsafe(
+    `
+      update song_orders
+      set metadata = coalesce(metadata, '{}'::jsonb) || $2::jsonb,
+          updated_at = now()
+      where id = $1
+    `,
+    [orderId, JSON.stringify(patch)],
+  );
+}
+
 export async function failOrder(orderId: string, errorMessage: string) {
   await ensureDatabase();
   const sql = getSql();
@@ -701,6 +945,25 @@ export async function listRecentCompletedOrdersForVenue(venueId: string, limit =
       limit $2
     `,
     [venueId, limit],
+  );
+
+  return normalizeOrderRecords(rows);
+}
+
+export async function listRecentCompletedS3Orders(limit = 10) {
+  await ensureDatabase();
+  const sql = getSql();
+  const rows = await sql.unsafe<SongOrderRecord[]>(
+    `
+      select ${mapOrderColumns()}
+      from song_orders
+      where status = 'completed'
+        and song_url is not null
+        and s3_key is not null
+      order by completed_at desc nulls last, updated_at desc
+      limit $1
+    `,
+    [Math.max(1, limit)],
   );
 
   return normalizeOrderRecords(rows);

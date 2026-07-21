@@ -2,8 +2,10 @@ import Stripe from "stripe";
 import { headers } from "next/headers";
 import { after, NextResponse } from "next/server";
 
+import { applyVenueAudienceRules } from "@/lib/content-policy";
 import { drainGenerationQueue } from "@/lib/queue";
 import {
+  getVenueById,
   getOrderById,
   markOrderPaidAndQueued,
 } from "@/lib/db";
@@ -41,10 +43,24 @@ export async function POST(request: Request) {
       const existingOrder = await getOrderById(orderId);
 
       if (existingOrder && !["processing", "completed"].includes(existingOrder.status)) {
-        const reconstructedInput =
-          readSongInputFromMetadata(session.metadata) ?? existingOrder.rawInputs;
-
-        const rawInputs = songRequestSchema.parse(reconstructedInput);
+        const venue = await getVenueById(existingOrder.venueId);
+        const reconstructedInput = readSongInputFromMetadata(session.metadata);
+        const mergedInput = songRequestSchema.parse(
+          reconstructedInput
+            ? {
+                ...existingOrder.rawInputs,
+                ...reconstructedInput,
+                photoBatchId: existingOrder.rawInputs.photoBatchId,
+                photoAssets: existingOrder.rawInputs.photoAssets,
+              }
+            : existingOrder.rawInputs,
+        );
+        const rawInputs = venue
+          ? applyVenueAudienceRules(mergedInput, {
+              allowExplicitContent: venue.allowExplicitContent,
+              allowKidsMode: venue.allowKidsMode,
+            })
+          : mergedInput;
 
         await markOrderPaidAndQueued({
           orderId,

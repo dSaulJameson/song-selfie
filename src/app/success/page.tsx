@@ -5,5 +5,5 @@ type Props = {
 };
 
 export default async function SuccessPage({ searchParams }: Props) {
-  return <OrderSuccessExperience searchParams={await searchParams} backHref="/" />;
+  return <OrderSuccessExperience searchParams={await searchParams} backHref="/generate" />;
 }

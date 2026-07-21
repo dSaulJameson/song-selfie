@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { after } from "next/server";
 
+import { applyVenueAudienceRules } from "@/lib/content-policy";
 import {
   getOrderByCheckoutSessionId,
   getOrderById,
+  getVenueById,
   markOrderPaidAndQueued,
 } from "@/lib/db";
 import { drainGenerationQueue } from "@/lib/queue";
@@ -32,9 +34,24 @@ export async function OrderSuccessExperience({
       const session = await getCheckoutSession(sessionId);
 
       if (session.payment_status === "paid" && session.metadata?.orderId === order.id) {
-        const reconstructedInput =
-          readSongInputFromMetadata(session.metadata) ?? order.rawInputs;
-        const rawInputs = songRequestSchema.parse(reconstructedInput);
+        const venue = await getVenueById(order.venueId);
+        const reconstructedInput = readSongInputFromMetadata(session.metadata);
+        const mergedInput = songRequestSchema.parse(
+          reconstructedInput
+            ? {
+                ...order.rawInputs,
+                ...reconstructedInput,
+                photoBatchId: order.rawInputs.photoBatchId,
+                photoAssets: order.rawInputs.photoAssets,
+              }
+            : order.rawInputs,
+        );
+        const rawInputs = venue
+          ? applyVenueAudienceRules(mergedInput, {
+              allowExplicitContent: venue.allowExplicitContent,
+              allowKidsMode: venue.allowKidsMode,
+            })
+          : mergedInput;
 
         await markOrderPaidAndQueued({
           orderId: order.id,
@@ -63,6 +80,12 @@ export async function OrderSuccessExperience({
     }
   }
 
+  if (order?.status === "queued") {
+    after(async () => {
+      await drainGenerationQueue();
+    });
+  }
+
   const wasFree =
     order?.amountTotal === 0 ||
     order?.checkoutSessionId?.startsWith("free_") ||
@@ -71,14 +94,14 @@ export async function OrderSuccessExperience({
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col justify-center px-4 py-10 sm:px-6">
-      <section className="rounded-[2rem] border border-[color:var(--color-line)] bg-white/86 p-8 shadow-[0_20px_50px_rgba(22,12,46,0.09)]">
-        <p className="text-xs font-bold uppercase tracking-[0.28em] text-[color:var(--color-accent)]">
+      <section className="rounded-[2rem] border border-white/70 bg-white/96 p-8 text-slate-950 shadow-[0_20px_50px_rgba(22,12,46,0.16)]">
+        <p className="text-xs font-bold uppercase tracking-[0.28em] text-fuchsia-500">
           {wasFree ? "Free test queued" : "Payment received"}
         </p>
-        <h1 className="mt-3 text-4xl font-black tracking-tight text-[color:var(--color-foreground)]">
+        <h1 className="mt-3 text-4xl font-black tracking-tight text-slate-950">
           Your song is officially in the queue.
         </h1>
-        <p className="mt-4 text-base leading-7 text-[color:var(--color-muted-foreground)]">
+        <p className="mt-4 text-base leading-7 text-slate-600">
           We are building the prompt, sending the generation job, and emailing
           the finished file once delivery is complete.
         </p>
@@ -94,7 +117,7 @@ export async function OrderSuccessExperience({
           </Link>
           <Link
             href="/login"
-            className="inline-flex items-center justify-center rounded-full border border-[color:var(--color-line)] px-5 py-3 text-sm font-semibold"
+            className="inline-flex items-center justify-center rounded-full border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700"
           >
             Venue/Admin sign in
           </Link>

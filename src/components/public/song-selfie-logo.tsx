@@ -1,15 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { Lobster_Two } from "next/font/google";
-
-const lobsterTwo = Lobster_Two({
-  subsets: ["latin"],
-  weight: ["700"],
-});
 
 type SongSelfieLogoProps = {
   compact?: boolean;
+  tone?: "light" | "dark";
 };
 
 export function SongSelfieLogo({ compact = false }: SongSelfieLogoProps) {
@@ -17,33 +12,18 @@ export function SongSelfieLogo({ compact = false }: SongSelfieLogoProps) {
     <div
       className={
         compact
-          ? "flex items-center gap-3"
-          : "flex flex-col items-center gap-3 text-center sm:flex-row sm:justify-center sm:text-left"
+          ? "mx-auto w-full max-w-[12rem] overflow-hidden -my-5 sm:max-w-[13rem] sm:-my-6"
+          : "mx-auto w-full max-w-[20rem] overflow-hidden -my-6 sm:max-w-[22rem] sm:-my-8"
       }
     >
       <Image
-        src="/icon.svg"
-        alt="Song Selfie icon"
-        width={compact ? 56 : 96}
-        height={compact ? 56 : 96}
-        className={compact ? "h-14 w-14" : "h-20 w-20 sm:h-24 sm:w-24"}
+        src="/song-selfie-new-logo.png"
+        alt="Song Selfie"
+        width={1152}
+        height={768}
         priority
+        className="block h-auto w-full scale-[1.16] object-contain"
       />
-      <div className="flex items-start gap-1">
-        <span
-          className={`${lobsterTwo.className} leading-none tracking-tight text-slate-950 ${
-            compact ? "text-4xl sm:text-5xl" : "text-5xl sm:text-7xl"
-          }`}
-        >
-          Song Selfie
-        </span>
-        <span
-          aria-hidden="true"
-          className={compact ? "pt-1 text-xl text-pink-500" : "pt-2 text-2xl text-pink-500 sm:text-3xl"}
-        >
-          ✦
-        </span>
-      </div>
     </div>
   );
 }

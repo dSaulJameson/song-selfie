@@ -76,6 +76,18 @@ export function getStripeConfig() {
   };
 }
 
+export function getStripeCheckoutBranding() {
+  return {
+    displayName: getFirstEnv("STRIPE_CHECKOUT_DISPLAY_NAME") ?? "Song Selfie",
+    iconFileId:
+      getFirstEnv("STRIPE_CHECKOUT_BRANDING_ICON_FILE_ID") ??
+      "file_1TQoW7GTllposakZjncsRds8",
+    logoFileId:
+      getFirstEnv("STRIPE_CHECKOUT_BRANDING_LOGO_FILE_ID") ??
+      "file_1TQoW8GTllposakZK7wuSsio",
+  };
+}
+
 export function getS3Config() {
   return {
     bucket: getFirstEnv("S3_BUCKET", "S3_BUCKET_NAME", "AWS_S3_BUCKET"),

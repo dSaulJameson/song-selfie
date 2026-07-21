@@ -1,0 +1,17 @@
+.git
+.github
+.next
+.vercel
+.clerk
+node_modules
+.env*
+env.local
+PersonalN8N
+New Site UI
+*.pem
+*ed25519*
+*.log
+*.tsbuildinfo
+coverage
+build
+out

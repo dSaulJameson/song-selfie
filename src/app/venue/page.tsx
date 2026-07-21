@@ -1,25 +1,40 @@
 import Image from "next/image";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import QRCode from "qrcode";
 
-import { getDashboardActor } from "@/lib/auth";
+import { getUserEmail, isAdminEmail } from "@/lib/auth";
 import {
+  type VenueRecord,
   type SongOrderRecord,
+  getVenueBySlug,
   listAllVenues,
   listOrdersForVenueIds,
   listVenuesByContactEmail,
   updateVenueStripeStatus,
 } from "@/lib/db";
-import { getBaseUrl, getS3Config } from "@/lib/env";
+import { getBaseUrl } from "@/lib/env";
 import { getConnectedAccountSnapshot } from "@/lib/stripe";
 import {
+  getVenueGeneratePath,
   getVenuePublicPath,
   isSystemVenueSlug,
 } from "@/lib/system-venues";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import {
   forwardVenueSongEmailAction,
+  sendVenuePayoutPreferenceAction,
   updateVenueDashboardPricingAction,
 } from "@/src/app/venue/actions";
+import { AudienceSettingsForm } from "@/src/components/venue/audience-settings-form";
+import { VenueQrActions } from "@/src/components/venue/qr-actions";
+
+type VenuePageProps = {
+  searchParams?: Promise<{
+    email?: string;
+    venue?: string;
+    created?: string;
+  }>;
+};
 
 function formatChoiceLabel(value: string) {
   if (value === "hip-hop") {
@@ -63,18 +78,111 @@ function buildSongTags(order: SongOrderRecord) {
   return tags.slice(0, 3);
 }
 
-export default async function VenuePage() {
-  const actor = await getDashboardActor();
-  const venues = actor.isAdmin
-    ? await listAllVenues()
-    : await listVenuesByContactEmail(actor.email);
+function getVenueAnalytics(orders: SongOrderRecord[], venueSharePercent: number) {
+  const paidOrders = orders.filter(
+    (order) =>
+      (order.amountTotal ?? 0) > 0 &&
+      !["draft", "checkout_created", "failed"].includes(order.status),
+  );
+  const grossRevenue = paidOrders.reduce((sum, order) => sum + (order.amountTotal ?? 0), 0);
+  const venueRevenue = Math.round((grossRevenue * venueSharePercent) / 100);
+  const completedCount = orders.filter((order) => order.status === "completed").length;
+  const dayFormatter = new Intl.DateTimeFormat("en-US", { weekday: "short" });
+  const today = new Date();
+  const revenueByDay = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today);
+    date.setHours(0, 0, 0, 0);
+    date.setDate(today.getDate() - (6 - index));
+    return {
+      key: date.toISOString().slice(0, 10),
+      label: dayFormatter.format(date),
+      revenue: 0,
+    };
+  });
+  const revenueByDayMap = new Map(revenueByDay.map((day) => [day.key, day]));
+
+  for (const order of paidOrders) {
+    const date = new Date(order.completedAt ?? order.updatedAt ?? order.createdAt);
+    const key = date.toISOString().slice(0, 10);
+    const day = revenueByDayMap.get(key);
+    if (day) {
+      day.revenue += order.amountTotal ?? 0;
+    }
+  }
+
+  const maxDailyRevenue = Math.max(100, ...revenueByDay.map((day) => day.revenue));
+  const genreCounts = new Map<string, number>();
+
+  for (const order of orders) {
+    const genre = order.rawInputs?.genre;
+    if (!genre) {
+      continue;
+    }
+
+    const label = formatChoiceLabel(genre);
+    genreCounts.set(label, (genreCounts.get(label) ?? 0) + 1);
+  }
+
+  const popularGenres = [...genreCounts.entries()]
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 4)
+    .map(([genre, count]) => ({ genre, count }));
+
+  return {
+    songsSold: paidOrders.length,
+    completedCount,
+    grossRevenue,
+    venueRevenue,
+    revenueByDay,
+    maxDailyRevenue,
+    popularGenres,
+  };
+}
+
+export default async function VenuePage({ searchParams }: VenuePageProps) {
+  const query = (await searchParams) ?? {};
+  const queryEmail = typeof query.email === "string" ? query.email.trim().toLowerCase() : "";
+  const queryVenueSlug = typeof query.venue === "string" ? query.venue.trim() : "";
+  const isClaimPreviewRequest = query.created === "1" && Boolean(queryEmail && queryVenueSlug);
+  const session = await auth();
+  const signedInUser = session.userId ? await currentUser() : null;
+  const signedInEmail = signedInUser ? getUserEmail(signedInUser) : "";
+  const actorEmail = signedInEmail || queryEmail;
+  const actorIsAdmin = signedInEmail ? isAdminEmail(signedInEmail) : false;
+  let pendingClaim = false;
+  let venues: VenueRecord[] = [];
+
+  if (signedInEmail) {
+    if (actorIsAdmin && queryVenueSlug) {
+      const venue = await getVenueBySlug(queryVenueSlug);
+      venues = venue ? [venue] : [];
+    } else if (actorIsAdmin) {
+      venues = await listAllVenues();
+    } else {
+      venues = await listVenuesByContactEmail(signedInEmail);
+    }
+  }
+
+  if (!signedInEmail && isClaimPreviewRequest) {
+    const venue = await getVenueBySlug(queryVenueSlug);
+    if (venue && venue.contactEmail.toLowerCase() === queryEmail) {
+      venues = [venue];
+      pendingClaim = true;
+    }
+  }
+
+  const claimUrl = `/sign-up?${new URLSearchParams({
+    email: actorEmail,
+    venue: queryVenueSlug || venues[0]?.slug || "",
+    created: "1",
+  }).toString()}`;
   const baseUrl = getBaseUrl();
-  const hasS3Bucket = Boolean(getS3Config().bucket);
 
   const venueCards = await Promise.all(
     venues.map(async (venue) => {
       const publicUrl = `${baseUrl}${getVenuePublicPath(venue.slug)}`;
-      const qrCode = await QRCode.toDataURL(publicUrl, {
+      const generateUrl = `${baseUrl}${getVenueGeneratePath(venue.slug)}`;
+      const qrCode = await QRCode.toDataURL(generateUrl, {
         width: 220,
         margin: 1,
       });
@@ -109,6 +217,7 @@ export default async function VenuePage() {
 
       return {
         ...venue,
+        generateUrl,
         qrCode,
         publicUrl,
         stripeState,
@@ -118,9 +227,15 @@ export default async function VenuePage() {
   );
 
   const orders = await listOrdersForVenueIds(venues.map((venue) => venue.id));
-  const totalRevenue = orders.reduce((sum, order) => sum + (order.amountTotal ?? 0), 0);
   const completedSongs = orders.filter((order) => order.status === "completed" && order.songUrl);
   const songsByVenueId = new Map<string, SongOrderRecord[]>();
+  const ordersByVenueId = new Map<string, SongOrderRecord[]>();
+
+  for (const order of orders) {
+    const existing = ordersByVenueId.get(order.venueId) ?? [];
+    existing.push(order);
+    ordersByVenueId.set(order.venueId, existing);
+  }
 
   for (const order of completedSongs) {
     const existing = songsByVenueId.get(order.venueId) ?? [];
@@ -129,73 +244,32 @@ export default async function VenuePage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-      <section className="rounded-[2rem] border border-[color:var(--color-line)] bg-white/86 p-6 shadow-[0_18px_44px_rgba(22,12,46,0.08)]">
-        <p className="text-xs font-bold uppercase tracking-[0.28em] text-[color:var(--color-accent)]">
-          Venue dashboard
-        </p>
-        <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-4xl font-black tracking-tight text-[color:var(--color-foreground)]">
-              Run your Song Selfie page
-            </h1>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-              Signed in as {actor.user.primaryEmailAddress?.emailAddress}. Manage
-              pricing, QR access, Stripe payouts, and the songs your guests have made.
-            </p>
-            {actor.isAdmin ? (
-              <p className="mt-2 text-xs font-semibold uppercase tracking-[0.24em] text-[color:var(--color-accent)]">
-                Admin venue-mode is active for testing.
+    <main className="mx-auto min-h-screen w-full max-w-7xl space-y-6 bg-[radial-gradient(circle_at_top_left,rgba(244,63,148,0.22),transparent_34%),linear-gradient(180deg,#08040d,#16091f_48%,#2a0d2a)] px-4 py-6 text-white sm:px-6 lg:px-8">
+      {pendingClaim ? (
+        <section className="sticky top-3 z-20 rounded-[1.3rem] border border-pink-300/30 bg-pink-500/15 px-4 py-3 shadow-[0_16px_36px_rgba(244,63,148,0.18)] backdrop-blur-xl">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-pink-200">
+                Claim this dashboard
               </p>
-            ) : null}
+              <p className="mt-1 text-sm font-semibold text-white">
+                Verify {actorEmail} to unlock pricing, payout setup, audience controls,
+                and forwarding.
+              </p>
+            </div>
+            <a
+              href={claimUrl}
+              className="inline-flex items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-accent),var(--color-accent-strong))] px-5 py-2.5 text-sm font-bold text-white"
+            >
+              Claim / verify account
+            </a>
           </div>
-          <div className="grid gap-3 sm:grid-cols-4">
-            <div className="rounded-[1.4rem] bg-[color:var(--color-surface)] px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--color-muted-foreground)]">
-                Venues
-              </p>
-              <p className="mt-2 text-2xl font-black">{venues.length}</p>
-            </div>
-            <div className="rounded-[1.4rem] bg-[color:var(--color-surface)] px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--color-muted-foreground)]">
-                Songs
-              </p>
-              <p className="mt-2 text-2xl font-black">{completedSongs.length}</p>
-            </div>
-            <div className="rounded-[1.4rem] bg-[color:var(--color-surface)] px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--color-muted-foreground)]">
-                Revenue
-              </p>
-              <p className="mt-2 text-2xl font-black">{formatCurrency(totalRevenue)}</p>
-            </div>
-            <div className="rounded-[1.4rem] bg-[color:var(--color-surface)] px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--color-muted-foreground)]">
-                Storage
-              </p>
-              <p className="mt-2 text-sm font-bold">
-                {hasS3Bucket ? "S3 bucket ready" : "Provider fallback"}
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {!hasS3Bucket ? (
-        <section className="rounded-[1.8rem] border border-amber-200 bg-amber-50/90 p-5 shadow-[0_12px_30px_rgba(120,53,15,0.08)]">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-amber-700">
-            S3 still needed
-          </p>
-          <p className="mt-2 text-sm leading-6 text-amber-900">
-            Songs are still allowed to complete, but without an S3 bucket they can fall back to
-            provider-hosted audio URLs. Add your bucket settings and Song Selfie can serve its own
-            playback links.
-          </p>
         </section>
       ) : null}
 
       <section className="space-y-6">
         {venueCards.length === 0 ? (
-          <div className="rounded-[2rem] border border-[color:var(--color-line)] bg-white/86 p-6 shadow-[0_18px_44px_rgba(22,12,46,0.08)]">
+          <div className="rounded-[2rem] border border-white/10 bg-white/8 p-6 text-white shadow-[0_18px_44px_rgba(0,0,0,0.25)] backdrop-blur-xl">
             <p className="text-sm leading-6 text-[color:var(--color-muted-foreground)]">
               This signed-in email has not been invited to a venue dashboard yet.
               An admin can add your email from the admin dashboard to unlock venue access.
@@ -204,11 +278,13 @@ export default async function VenuePage() {
         ) : (
           venueCards.map((venue) => {
             const songs = songsByVenueId.get(venue.id) ?? [];
+            const venueOrders = ordersByVenueId.get(venue.id) ?? [];
+            const analytics = getVenueAnalytics(venueOrders, venue.venueSharePercent);
 
             return (
               <article
                 key={venue.id}
-                className="rounded-[2rem] border border-[color:var(--color-line)] bg-white/86 p-6 shadow-[0_18px_44px_rgba(22,12,46,0.08)]"
+                className="rounded-[2rem] border border-white/10 bg-white/8 p-6 text-white shadow-[0_18px_44px_rgba(0,0,0,0.28)] backdrop-blur-xl"
               >
                 <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
                   <div className="flex flex-col gap-5 lg:flex-row">
@@ -226,7 +302,7 @@ export default async function VenuePage() {
                         </p>
                         {venue.isSystemVenue ? (
                           <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-700">
-                            System demo
+                            Song Selfie page
                           </span>
                         ) : null}
                       </div>
@@ -243,18 +319,36 @@ export default async function VenuePage() {
                         </p>
                         <p>
                           <span className="font-semibold text-[color:var(--color-foreground)]">
-                            Public page:
+                            QR generate link:
+                          </span>{" "}
+                          <a
+                            href={venue.generateUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-mono text-xs text-[color:var(--color-accent)]"
+                          >
+                            {venue.generateUrl}
+                          </a>
+                        </p>
+                        <p>
+                          <span className="font-semibold text-[color:var(--color-foreground)]">
+                            Venue page:
                           </span>{" "}
                           <a
                             href={venue.publicUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="font-mono text-xs text-[color:var(--color-accent)]"
+                            className="font-mono text-xs text-[color:var(--color-muted-foreground)]"
                           >
                             {venue.publicUrl}
                           </a>
                         </p>
                       </div>
+                      <VenueQrActions
+                        qrCode={venue.qrCode}
+                        venueName={venue.name}
+                        publicUrl={venue.generateUrl}
+                      />
                     </div>
                   </div>
 
@@ -270,6 +364,9 @@ export default async function VenuePage() {
                         Venue share
                       </p>
                       <p className="mt-2 text-xl font-black">{venue.venueSharePercent}%</p>
+                      <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
+                        Song Selfie keeps {100 - venue.venueSharePercent}%.
+                      </p>
                     </div>
                     <div className="rounded-[1.3rem] bg-[color:var(--color-surface)] px-4 py-3">
                       <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--color-muted-foreground)]">
@@ -281,33 +378,180 @@ export default async function VenuePage() {
                           : "Needs onboarding"}
                       </p>
                     </div>
+                    <div className="rounded-[1.3rem] bg-[color:var(--color-surface)] px-4 py-3 sm:col-span-3">
+                      <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--color-muted-foreground)]">
+                        Audience modes
+                      </p>
+                      <p className="mt-2 text-sm font-bold">
+                        {venue.allowKidsMode
+                          ? "Forced kids mode on"
+                          : venue.allowExplicitContent
+                            ? "NSFW allowed"
+                            : "NSFW off"}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                  <a
-                    href={`/api/venues/connect?venueId=${venue.id}`}
-                    className="inline-flex items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-accent),var(--color-accent-strong))] px-5 py-3 text-sm font-semibold text-white"
-                  >
-                    {venue.stripeAccountId ? "Manage Stripe Connect" : "Connect Stripe"}
-                  </a>
-                  <a
-                    href={venue.publicUrl}
-                    className="inline-flex items-center justify-center rounded-full border border-[color:var(--color-line)] px-5 py-3 text-sm font-semibold"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open public venue page
-                  </a>
+                <div className="mt-5 rounded-[1.4rem] border border-emerald-300/25 bg-emerald-400/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-200">
+                    Start in two minutes
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-white/80">
+                    Print the QR code, set your song price, and leave payout setup for later.
+                    Guests can start creating songs on your page right away.
+                  </p>
                 </div>
 
-                <div className="mt-5 rounded-[1.4rem] border border-[color:var(--color-line)] bg-white/70 p-4">
+                <div className="mt-5 rounded-[1.4rem] border border-white/10 bg-white/7 p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--color-muted-foreground)]">
+                        Venue performance
+                      </p>
+                      <h3 className="mt-2 text-xl font-black">Sales and song trends</h3>
+                    </div>
+                    <p className="text-sm text-[color:var(--color-muted-foreground)]">
+                      Revenue is based on paid songs that cleared checkout.
+                    </p>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-4">
+                    <div className="rounded-[1.3rem] bg-[color:var(--color-surface)] px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--color-muted-foreground)]">
+                        Songs sold
+                      </p>
+                      <p className="mt-2 text-2xl font-black">{analytics.songsSold}</p>
+                    </div>
+                    <div className="rounded-[1.3rem] bg-[color:var(--color-surface)] px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--color-muted-foreground)]">
+                        Completed
+                      </p>
+                      <p className="mt-2 text-2xl font-black">{analytics.completedCount}</p>
+                    </div>
+                    <div className="rounded-[1.3rem] bg-[color:var(--color-surface)] px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--color-muted-foreground)]">
+                        Gross revenue
+                      </p>
+                      <p className="mt-2 text-2xl font-black">
+                        {formatCurrency(analytics.grossRevenue)}
+                      </p>
+                    </div>
+                    <div className="rounded-[1.3rem] bg-[color:var(--color-surface)] px-4 py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--color-muted-foreground)]">
+                        Venue earnings
+                      </p>
+                      <p className="mt-2 text-2xl font-black">
+                        {formatCurrency(analytics.venueRevenue)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 lg:grid-cols-[1.3fr_0.7fr]">
+                    <div className="rounded-[1.3rem] border border-white/10 bg-white/7 p-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-bold text-[color:var(--color-foreground)]">
+                          Last 7 days
+                        </p>
+                        <p className="text-xs text-[color:var(--color-muted-foreground)]">
+                          Gross revenue
+                        </p>
+                      </div>
+                      <div className="mt-4 flex h-36 items-end gap-2">
+                        {analytics.revenueByDay.map((day) => (
+                          <div key={day.key} className="flex flex-1 flex-col items-center gap-2">
+                            <div className="flex h-24 w-full items-end rounded-full bg-[color:var(--color-surface)] px-1">
+                              <div
+                                className="w-full rounded-full bg-[linear-gradient(180deg,var(--color-accent),var(--color-accent-strong))]"
+                                style={{
+                                  height:
+                                    day.revenue > 0
+                                      ? `${Math.max(
+                                          6,
+                                          Math.round(
+                                            (day.revenue / analytics.maxDailyRevenue) * 100,
+                                          ),
+                                        )}%`
+                                      : "0%",
+                                }}
+                              />
+                            </div>
+                            <span className="text-[11px] font-semibold text-[color:var(--color-muted-foreground)]">
+                              {day.label}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-[1.3rem] border border-white/10 bg-white/7 p-4">
+                      <p className="text-sm font-bold text-[color:var(--color-foreground)]">
+                        Popular genres
+                      </p>
+                      <div className="mt-4 space-y-3">
+                        {analytics.popularGenres.length === 0 ? (
+                          <p className="text-sm text-[color:var(--color-muted-foreground)]">
+                            Genre trends will appear after guests make songs.
+                          </p>
+                        ) : (
+                          analytics.popularGenres.map((genre) => (
+                            <div key={genre.genre} className="space-y-1">
+                              <div className="flex items-center justify-between gap-3 text-sm">
+                                <span className="font-semibold text-[color:var(--color-foreground)]">
+                                  {genre.genre}
+                                </span>
+                                <span className="text-[color:var(--color-muted-foreground)]">
+                                  {genre.count}
+                                </span>
+                              </div>
+                              <div className="h-2 rounded-full bg-[color:var(--color-surface)]">
+                                <div
+                                  className="h-full rounded-full bg-[linear-gradient(90deg,var(--color-accent),var(--color-accent-strong))]"
+                                  style={{
+                                    width: `${Math.max(
+                                      10,
+                                      Math.round(
+                                        (genre.count /
+                                          Math.max(
+                                            1,
+                                            ...analytics.popularGenres.map(
+                                              (item) => item.count,
+                                            ),
+                                          )) *
+                                          100,
+                                      ),
+                                    )}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-[1.4rem] border border-white/10 bg-white/7 p-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--color-muted-foreground)]">
                     Live pricing
                   </p>
-                  {venue.isSystemVenue ? (
+                  {pendingClaim ? (
+                    <div className="mt-3 flex flex-col gap-3 rounded-[1.2rem] border border-pink-300/25 bg-pink-500/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm leading-6 text-white/85">
+                        Claim this dashboard to edit pricing. The current price is{" "}
+                        <strong>{formatCurrency(venue.priceCents)}</strong>.
+                      </p>
+                      <a
+                        href={claimUrl}
+                        className="inline-flex items-center justify-center rounded-full bg-pink-500 px-4 py-2 text-sm font-semibold text-white"
+                      >
+                        Claim account
+                      </a>
+                    </div>
+                  ) : venue.isSystemVenue ? (
                     <p className="mt-3 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-                      System demo venues keep their own fixed pricing. Real venue pages should
+                      Song Selfie managed pages keep their own fixed pricing. Real venue pages should
                       start at a minimum of $1.00 per song.
                     </p>
                   ) : (
@@ -322,7 +566,7 @@ export default async function VenuePage() {
                         min={100}
                         step={25}
                         defaultValue={venue.priceCents}
-                        className="h-11 rounded-full border border-[color:var(--color-line)] px-4"
+                        className="h-11 rounded-full border border-white/10 bg-white/10 px-4 text-white placeholder:text-white/40"
                       />
                       <button
                         type="submit"
@@ -331,9 +575,179 @@ export default async function VenuePage() {
                         Update price
                       </button>
                       <span className="text-xs text-[color:var(--color-muted-foreground)]">
-                        Minimum venue price is $1.00.
+                        Minimum venue price is $1.00. You keep {venue.venueSharePercent}%.
                       </span>
                     </form>
+                  )}
+                </div>
+
+                <div className="mt-5 rounded-[1.4rem] border border-white/10 bg-white/7 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--color-muted-foreground)]">
+                    Get paid
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
+                    Stripe is the fastest payout path. Bank transfer and mailed checks are collected
+                    here for manual payouts, usually on a weekly to bi-weekly schedule.
+                  </p>
+                  {pendingClaim ? (
+                    <div className="mt-4 flex flex-col gap-3 rounded-[1.2rem] border border-pink-300/25 bg-pink-500/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm leading-6 text-white/85">
+                        Claim this dashboard before adding payout details.
+                      </p>
+                      <a
+                        href={claimUrl}
+                        className="inline-flex items-center justify-center rounded-full bg-pink-500 px-4 py-2 text-sm font-semibold text-white"
+                      >
+                        Claim account
+                      </a>
+                    </div>
+                  ) : (
+                    <div className="mt-4 grid gap-4 lg:grid-cols-3">
+                    <div className="rounded-[1.2rem] border border-white/10 bg-white/7 p-4">
+                      <p className="text-sm font-bold text-[color:var(--color-foreground)]">
+                        Stripe Connect
+                      </p>
+                      <p className="mt-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+                        Fastest automated payout path. Stripe collects bank details securely and
+                        payouts can be almost instant once Stripe approves the account.
+                      </p>
+                      <a
+                        href={`/api/venues/connect?venueId=${venue.id}`}
+                        className="mt-4 inline-flex items-center justify-center rounded-full bg-[linear-gradient(135deg,var(--color-accent),var(--color-accent-strong))] px-4 py-2 text-sm font-semibold text-white"
+                      >
+                        {venue.stripeAccountId ? "Manage Stripe" : "Connect Stripe"}
+                      </a>
+                    </div>
+
+                    <form
+                      action={sendVenuePayoutPreferenceAction}
+                      className="rounded-[1.2rem] border border-white/10 bg-white/7 p-4"
+                    >
+                      <input type="hidden" name="venueId" value={venue.id} />
+                      <input type="hidden" name="payoutMethod" value="bank-transfer" />
+                      <p className="text-sm font-bold text-[color:var(--color-foreground)]">
+                        Bank transfer
+                      </p>
+                      <p className="mt-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+                        Manual payout option. Usually paid weekly to bi-weekly.
+                      </p>
+                      {venue.payoutMethod === "bank-transfer" ? (
+                        <p className="mt-2 rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+                          Bank transfer details saved.
+                        </p>
+                      ) : null}
+                      <input
+                        name="accountHolderName"
+                        placeholder="Account holder name"
+                        className="mt-3 h-10 w-full rounded-full border border-white/10 bg-white/10 px-3 text-sm text-white placeholder:text-white/40"
+                        required
+                      />
+                      <input
+                        name="bankName"
+                        placeholder="Bank name"
+                        className="mt-2 h-10 w-full rounded-full border border-white/10 bg-white/10 px-3 text-sm text-white placeholder:text-white/40"
+                        required
+                      />
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        <input
+                          name="routingNumber"
+                          inputMode="numeric"
+                          placeholder="Routing number"
+                          className="h-10 rounded-full border border-white/10 bg-white/10 px-3 text-sm text-white placeholder:text-white/40"
+                          required
+                        />
+                        <input
+                          name="accountNumber"
+                          inputMode="numeric"
+                          placeholder="Account number"
+                          className="h-10 rounded-full border border-white/10 bg-white/10 px-3 text-sm text-white placeholder:text-white/40"
+                          required
+                        />
+                      </div>
+                      <select
+                        name="accountType"
+                        defaultValue="checking"
+                        className="mt-2 h-10 w-full rounded-full border border-white/10 bg-white/10 px-3 text-sm text-white"
+                      >
+                        <option value="checking">Checking</option>
+                        <option value="savings">Savings</option>
+                      </select>
+                      <button
+                        type="submit"
+                        className="mt-3 inline-flex items-center justify-center rounded-full border border-[color:var(--color-line)] px-4 py-2 text-sm font-semibold"
+                      >
+                        Save bank details
+                      </button>
+                    </form>
+
+                    <form
+                      action={sendVenuePayoutPreferenceAction}
+                      className="rounded-[1.2rem] border border-white/10 bg-white/7 p-4"
+                    >
+                      <input type="hidden" name="venueId" value={venue.id} />
+                      <input type="hidden" name="payoutMethod" value="check" />
+                      <p className="text-sm font-bold text-[color:var(--color-foreground)]">
+                        Checks by mail
+                      </p>
+                      <p className="mt-2 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
+                        Add the payee and mailing address. Checks are usually sent bi-weekly.
+                      </p>
+                      {venue.payoutMethod === "check" ? (
+                        <p className="mt-2 rounded-full bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+                          Check mailing details saved.
+                        </p>
+                      ) : null}
+                      <input
+                        name="payableTo"
+                        placeholder="Payable to"
+                        className="mt-3 h-10 w-full rounded-full border border-white/10 bg-white/10 px-3 text-sm text-white placeholder:text-white/40"
+                        required
+                      />
+                      <textarea
+                        name="mailingAddress"
+                        rows={3}
+                        placeholder="Mailing address"
+                        className="mt-3 w-full rounded-[1rem] border border-white/10 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/40"
+                        required
+                      />
+                      <input
+                        name="checkMemo"
+                        placeholder="Memo or notes (optional)"
+                        className="mt-2 h-10 w-full rounded-full border border-white/10 bg-white/10 px-3 text-sm text-white placeholder:text-white/40"
+                      />
+                      <button
+                        type="submit"
+                        className="mt-3 inline-flex items-center justify-center rounded-full border border-[color:var(--color-line)] px-4 py-2 text-sm font-semibold"
+                      >
+                        Save check details
+                      </button>
+                    </form>
+                  </div>
+                  )}
+                </div>
+
+                <div className="mt-5 rounded-[1.4rem] border border-white/10 bg-white/7 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[color:var(--color-muted-foreground)]">
+                    Audience controls
+                  </p>
+                  {pendingClaim ? (
+                    <div className="mt-3 flex flex-col gap-3 rounded-[1.2rem] border border-pink-300/25 bg-pink-500/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm leading-6 text-white/85">
+                        Claim this dashboard to change NSFW and kids-mode settings.
+                      </p>
+                      <a
+                        href={claimUrl}
+                        className="inline-flex items-center justify-center rounded-full bg-pink-500 px-4 py-2 text-sm font-semibold text-white"
+                      >
+                        Claim account
+                      </a>
+                    </div>
+                  ) : (
+                    <AudienceSettingsForm
+                      venueId={venue.id}
+                      allowExplicitContent={venue.allowExplicitContent}
+                      forceKidsMode={venue.allowKidsMode}
+                    />
                   )}
                 </div>
 
@@ -343,10 +757,10 @@ export default async function VenuePage() {
                       <p className="text-xs font-bold uppercase tracking-[0.24em] text-[color:var(--color-accent)]">
                         Songs played here
                       </p>
-                      <h3 className="mt-2 text-xl font-black">One-line song library</h3>
+                      <h3 className="mt-2 text-xl font-black">Venue playlist</h3>
                     </div>
                     <p className="text-sm text-[color:var(--color-muted-foreground)]">
-                      Forward any finished song if a guest misses the email.
+                      Walk up to the venue computer, pause the house music, and hit Play.
                     </p>
                   </div>
 
@@ -409,7 +823,7 @@ export default async function VenuePage() {
                                 name="forwardEmail"
                                 type="email"
                                 placeholder="Forward to email"
-                                className="h-11 flex-1 rounded-full border border-[color:var(--color-line)] px-4"
+                                className="h-11 flex-1 rounded-full border border-white/10 bg-white/10 px-4 text-white placeholder:text-white/40"
                                 required
                               />
                               <button

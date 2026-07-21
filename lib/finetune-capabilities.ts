@@ -2,10 +2,15 @@ import {
   GENRE_VALUES,
   KEY_VALUES,
   LANGUAGE_VALUES,
-  MOOD_VALUES,
+  TAG_DRUM_STYLE_VALUES,
+  TAG_ENERGY_VALUES,
+  TAG_ERA_VALUES,
+  TAG_INSTRUMENT_VALUES,
+  TAG_MOOD_VALUES,
+  TAG_PRODUCTION_VALUES,
+  TAG_SCENE_VALUES,
+  TAG_VOCAL_VALUES,
   SCALE_VALUES,
-  SONG_TYPE_VALUES,
-  STRUCTURE_VALUES,
   TIME_SIGNATURE_VALUES,
   type SongRequestInput,
 } from "@/lib/schema";
@@ -19,7 +24,14 @@ export type FormOption = {
 export type FormField = {
   id: keyof SongRequestInput;
   label: string;
-  kind: "text" | "email" | "textarea" | "select" | "cards" | "range" | "toggle";
+  kind:
+    | "text"
+    | "email"
+    | "textarea"
+    | "select"
+    | "range"
+    | "toggle"
+    | "multi-select";
   placeholder?: string;
   helper?: string;
   required?: boolean;
@@ -39,58 +51,18 @@ export type FormSection = {
   fields: FormField[];
 };
 
-const SONG_TYPE_OPTIONS: FormOption[] = [
-  {
-    value: SONG_TYPE_VALUES[0],
-    label: "Epic battle",
-    description: "Big cinematic tension, huge hook, total showdown energy.",
-  },
-  {
-    value: SONG_TYPE_VALUES[1],
-    label: "Love song",
-    description: "Warm, flirty, glossy, and easy to sing along to.",
-  },
-  {
-    value: SONG_TYPE_VALUES[2],
-    label: "Party anthem",
-    description: "Fast lift, big drop, packed-floor chorus.",
-  },
-  {
-    value: SONG_TYPE_VALUES[3],
-    label: "Funny roast",
-    description: "Playful jabs, insider jokes, chaotic crowd laughs.",
-  },
-  {
-    value: SONG_TYPE_VALUES[4],
-    label: "Sexy vibe",
-    description: "Late-night groove, velvet vocal tone, confident swagger.",
-  },
-  {
-    value: SONG_TYPE_VALUES[5],
-    label: "Chill vibe",
-    description: "Laid-back bounce for the slow sip and head nod crowd.",
-  },
-  {
-    value: SONG_TYPE_VALUES[6],
-    label: "Story mode",
-    description: "Narrative verses with a clear setup, twist, and payoff.",
-  },
-];
+function titleCase(value: string) {
+  return value
+    .split("-")
+    .map((part) => {
+      if (/^\d/.test(part)) {
+        return part.toUpperCase();
+      }
 
-const MOOD_OPTIONS: FormOption[] = MOOD_VALUES.map((value) => ({
-  value,
-  label: value.charAt(0).toUpperCase() + value.slice(1),
-  description:
-    value === "aggressive"
-      ? "Harder edges, sharper drums, more bite."
-      : value === "emotional"
-        ? "Heart-forward and cinematic."
-        : value === "hype"
-          ? "Big room energy with louder lift."
-          : value === "happy"
-            ? "Bright, playful, easy-win vibes."
-            : "Mellow, smooth, and breezy.",
-}));
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(" ");
+}
 
 const GENRE_OPTIONS: FormOption[] = [
   { value: GENRE_VALUES[0], label: "Cinematic pop" },
@@ -113,20 +85,52 @@ const GENRE_OPTIONS: FormOption[] = [
   { value: GENRE_VALUES[17], label: "90s throwback" },
 ];
 
-const STRUCTURE_OPTIONS: FormOption[] = [
-  { value: STRUCTURE_VALUES[0], label: "Instant hook" },
-  { value: STRUCTURE_VALUES[1], label: "Story arc" },
-  { value: STRUCTURE_VALUES[2], label: "Drop heavy" },
-  { value: STRUCTURE_VALUES[3], label: "Slow burn" },
-  { value: STRUCTURE_VALUES[4], label: "Singalong chorus" },
-];
+const TAG_MOOD_OPTIONS: FormOption[] = TAG_MOOD_VALUES.map((value) => ({
+  value,
+  label: titleCase(value),
+}));
+
+const TAG_SCENE_OPTIONS: FormOption[] = TAG_SCENE_VALUES.map((value) => ({
+  value,
+  label: titleCase(value),
+}));
+
+const TAG_ENERGY_OPTIONS: FormOption[] = TAG_ENERGY_VALUES.map((value) => ({
+  value,
+  label: titleCase(value),
+}));
+
+const TAG_INSTRUMENT_OPTIONS: FormOption[] = TAG_INSTRUMENT_VALUES.map((value) => ({
+  value,
+  label: titleCase(value),
+}));
+
+const TAG_DRUM_STYLE_OPTIONS: FormOption[] = TAG_DRUM_STYLE_VALUES.map((value) => ({
+  value,
+  label: titleCase(value),
+}));
+
+const TAG_VOCAL_OPTIONS: FormOption[] = TAG_VOCAL_VALUES.map((value) => ({
+  value,
+  label: titleCase(value),
+}));
+
+const TAG_PRODUCTION_OPTIONS: FormOption[] = TAG_PRODUCTION_VALUES.map((value) => ({
+  value,
+  label: titleCase(value),
+}));
+
+const TAG_ERA_OPTIONS: FormOption[] = TAG_ERA_VALUES.map((value) => ({
+  value,
+  label: titleCase(value),
+}));
 
 export function getSongRequestDefaults(): SongRequestInput {
   return {
     names: "",
     email: "",
     genre: "cinematic-pop",
-    bpm: 122,
+    bpm: 120,
     songType: "party-anthem",
     mood: "happy",
     energy: 4,
@@ -135,41 +139,52 @@ export function getSongRequestDefaults(): SongRequestInput {
     makeFunny: false,
     includeEveryoneNames: true,
     makeDramatic: false,
+    makeDirty: false,
+    kidsMode: false,
     structure: "singalong-chorus",
-    duration: 60,
+    duration: 120,
     language: "en",
     key: "auto",
     scale: "auto",
     timesignature: "4",
+    tagMood: [],
+    tagScene: [],
+    tagEnergy: [],
+    tagInstruments: [],
+    tagDrumStyle: [],
+    tagVocals: [],
+    tagProduction: [],
+    tagEra: [],
     lyrics: "",
     seed: null,
+    photoBatchId: null,
+    photoAssets: [],
   };
 }
 
 export function getFineTuneCapabilities() {
   const sections: FormSection[] = [
     {
-      id: "spotlight",
-      eyebrow: "Guest Inputs",
-      title: "Who is this song starring?",
+      id: "primary",
+      eyebrow: "Core Form",
+      title: "Describe the memory",
       description:
-        "We turn the table details into a structured Finetuning.ai prompt and tag set before checkout completes.",
+        "Keep the front of the form simple, then open advanced controls only if you want to steer the song more directly.",
       fields: [
         {
           id: "names",
-          label: "Names",
+          label: "Who is in this memory?",
           kind: "text",
-          placeholder: "John, Sarah, the birthday squad",
-          helper: "Separate names with commas so we can drop them into the hook.",
+          placeholder: "Sarah, Mike, Buddy the dog",
+          helper: "Separate people, groups, and pets with commas.",
           required: true,
         },
         {
-          id: "email",
-          label: "Email",
-          kind: "email",
-          placeholder: "you@example.com",
-          helper: "We send the finished track here as soon as it clears the queue.",
-          required: true,
+          id: "story",
+          label: "What happened?",
+          kind: "textarea",
+          placeholder: "Vegas trip, rooftop drinks, lost phones, great night...",
+          helper: "Describe the moment and we will turn it into a song.",
         },
         {
           id: "genre",
@@ -177,9 +192,27 @@ export function getFineTuneCapabilities() {
           kind: "select",
           options: GENRE_OPTIONS,
           helper:
-            "Genre is expressed through Finetuning.ai tags rather than a dedicated API field.",
+            "Genre stays outside Advanced and preloads BPM plus a baseline sound profile.",
           required: true,
         },
+        {
+          id: "email",
+          label: "Where are we sending this memory?",
+          kind: "email",
+          placeholder: "you@example.com",
+          helper: "We send the finished song here.",
+          required: true,
+        },
+      ],
+    },
+    {
+      id: "advanced",
+      eyebrow: "Advanced",
+      title: "Advanced Song Settings",
+      description:
+        "These controls shape the sound more directly. Duration is fixed at 120 seconds.",
+      collapsible: true,
+      fields: [
         {
           id: "bpm",
           label: "Tempo (BPM)",
@@ -187,85 +220,70 @@ export function getFineTuneCapabilities() {
           min: 60,
           max: 200,
           step: 1,
-          helper: "BPM maps directly to the API's `bpm` parameter.",
+          helper: "Sets the tempo directly.",
           apiParameter: true,
         },
-      ],
-    },
-    {
-      id: "creative",
-      eyebrow: "Creative Control",
-      title: "Shape the performance",
-      description:
-        "These controls feed the tag prompt, letting us steer style, structure, tone, and pacing without hardcoding a one-size-fits-all form.",
-      fields: [
         {
-          id: "songType",
-          label: "Song type",
-          kind: "cards",
-          options: SONG_TYPE_OPTIONS,
-          required: true,
+          id: "tagMood",
+          label: "Mood tags",
+          kind: "multi-select",
+          options: TAG_MOOD_OPTIONS,
         },
         {
-          id: "mood",
-          label: "Mood",
-          kind: "cards",
-          options: MOOD_OPTIONS,
-          required: true,
+          id: "tagScene",
+          label: "Scene tags",
+          kind: "multi-select",
+          options: TAG_SCENE_OPTIONS,
         },
         {
-          id: "energy",
-          label: "Energy",
-          kind: "range",
-          min: 1,
-          max: 5,
-          step: 1,
-          helper: "A higher value pushes the tag mix harder, brighter, and more explosive.",
-          required: true,
+          id: "tagEnergy",
+          label: "Energy tags",
+          kind: "multi-select",
+          options: TAG_ENERGY_OPTIONS,
         },
         {
-          id: "story",
-          label: "What's happening at your table?",
-          kind: "textarea",
-          placeholder: "Birthday party showdown, surprise proposal, reunion chaos...",
-          helper:
-            "Story context is translated into a tighter natural-language prompt before we call FineTune.",
+          id: "tagInstruments",
+          label: "Instruments",
+          kind: "multi-select",
+          options: TAG_INSTRUMENT_OPTIONS,
         },
         {
-          id: "structure",
-          label: "Structure",
-          kind: "select",
-          options: STRUCTURE_OPTIONS,
-          helper:
-            "Structure is tag-driven. FineTune exposes `tags`, so structure hints are encoded there.",
+          id: "tagDrumStyle",
+          label: "Drum styles",
+          kind: "multi-select",
+          options: TAG_DRUM_STYLE_OPTIONS,
         },
         {
-          id: "duration",
-          label: "Duration (seconds)",
-          kind: "range",
-          min: 15,
-          max: 180,
-          step: 15,
-          helper: "Shorter songs need tighter, fewer lyrics.",
-          apiParameter: true,
+          id: "tagVocals",
+          label: "Vocals",
+          kind: "multi-select",
+          options: TAG_VOCAL_OPTIONS,
         },
-      ],
-    },
-    {
-      id: "extras",
-      eyebrow: "Flavor Boosters",
-      title: "Add a twist",
-      description:
-        "These optional toggles expand the final prompt so the generated track feels custom instead of generic.",
-      fields: [
         {
-          id: "makeFunny",
-          label: "Make it funny",
+          id: "tagProduction",
+          label: "Production",
+          kind: "multi-select",
+          options: TAG_PRODUCTION_OPTIONS,
+        },
+        {
+          id: "tagEra",
+          label: "Era",
+          kind: "multi-select",
+          options: TAG_ERA_OPTIONS,
+        },
+        {
+          id: "makeDirty",
+          label: "NSFW (make it dirty)",
           kind: "toggle",
         },
         {
-          id: "includeEveryoneNames",
-          label: "Include everyone's name",
+          id: "kidsMode",
+          label: "Just for kids",
+          kind: "toggle",
+        },
+        {
+          id: "makeFunny",
+          label: "Make it funny",
           kind: "toggle",
         },
         {
@@ -274,20 +292,15 @@ export function getFineTuneCapabilities() {
           kind: "toggle",
         },
         {
+          id: "includeEveryoneNames",
+          label: "Include names",
+          kind: "toggle",
+        },
+        {
           id: "mentionVenueName",
           label: "Mention the venue",
           kind: "toggle",
         },
-      ],
-    },
-    {
-      id: "advanced",
-      eyebrow: "FineTune API",
-      title: "Direct generation parameters",
-      description:
-        "These fields map one-to-one to the documented Finetuning.ai music generation API: `lyrics`, `duration`, `bpm`, `language`, `key`, `scale`, `timesignature`, and `seed`. `tags` is synthesized from the creative controls above.",
-      collapsible: true,
-      fields: [
         {
           id: "language",
           label: "Language",
@@ -314,7 +327,7 @@ export function getFineTuneCapabilities() {
           kind: "select",
           options: SCALE_VALUES.map((value) => ({
             value,
-            label: value.charAt(0).toUpperCase() + value.slice(1),
+            label: titleCase(value),
           })),
           apiParameter: true,
         },
@@ -326,22 +339,6 @@ export function getFineTuneCapabilities() {
             value,
             label: `${value}/4`,
           })),
-          apiParameter: true,
-        },
-        {
-          id: "lyrics",
-          label: "Optional lyric starter",
-          kind: "textarea",
-          placeholder: "Write a chant, a hook, or leave this blank for full AI generation.",
-          helper: "This maps directly to FineTune's `lyrics` parameter.",
-          apiParameter: true,
-        },
-        {
-          id: "seed",
-          label: "Seed",
-          kind: "text",
-          placeholder: "Optional deterministic seed",
-          helper: "Leave blank for a fresh take every time.",
           apiParameter: true,
         },
       ],
@@ -367,14 +364,17 @@ export function getFineTuneCapabilities() {
       tagDrivenDimensions: [
         "genre",
         "mood",
+        "scene",
         "energy",
-        "structure",
-        "vocal style",
-        "instrumentation",
+        "instruments",
+        "drum styles",
+        "vocals",
+        "production",
+        "era",
         "story context",
       ],
       notes:
-        "Genre, mood, energy, structure, and styling are modeled through `tags`; they are not separate top-level API fields in the current docs.",
+        "Genre is surfaced outside Advanced and still shapes the generated sound profile. Duration is fixed to 120 seconds in the UI for now.",
     },
     sections,
     defaults: getSongRequestDefaults(),

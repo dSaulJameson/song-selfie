@@ -19,7 +19,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Song Selfie",
   description:
-    "SongSelfie.com turns bar, restaurant, and party memories into custom songs guests can keep.",
+    "Song Selfie creates original custom songs that become the soundtrack to your memories.",
   icons: {
     icon: "/icon.svg",
     shortcut: "/icon.svg",
@@ -32,7 +32,13 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const body = hasClerkClientKeys() ? <ClerkProvider>{children}</ClerkProvider> : children;
+  const clerkProxyUrl =
+    process.env.NEXT_PUBLIC_CLERK_PROXY_URL || "https://www.songselfie.com/__clerk";
+  const body = hasClerkClientKeys() ? (
+    <ClerkProvider proxyUrl={clerkProxyUrl}>{children}</ClerkProvider>
+  ) : (
+    children
+  );
 
   return (
     <html

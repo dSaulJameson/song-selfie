@@ -1,7 +1,11 @@
 import Stripe from "stripe";
 
 import type { SongRequestInput } from "@/lib/schema";
-import { getBaseUrl, getStripeConfig } from "@/lib/env";
+import {
+  getBaseUrl,
+  getStripeCheckoutBranding,
+  getStripeConfig,
+} from "@/lib/env";
 import { getVenuePublicPath, getVenueSuccessPath } from "@/lib/system-venues";
 import { chunkString, safeJsonParse } from "@/lib/utils";
 
@@ -32,7 +36,11 @@ export function buildCheckoutMetadata(params: {
   orderId: string;
   venue: CheckoutVenue;
 }) {
-  const payload = JSON.stringify(params.input);
+  const metadataSafeInput: SongRequestInput = {
+    ...params.input,
+    photoAssets: [],
+  };
+  const payload = JSON.stringify(metadataSafeInput);
   const chunks = chunkString(payload, 450);
 
   return chunks.reduce<Record<string, string>>(
@@ -47,6 +55,8 @@ export function buildCheckoutMetadata(params: {
       venueName: params.venue.name,
       customerEmail: params.input.email,
       names: params.input.names.slice(0, 500),
+      photoBatchId: params.input.photoBatchId ?? "",
+      photoCount: String(params.input.photoAssets.length),
     },
   );
 }
@@ -79,14 +89,25 @@ export async function createVenueCheckoutSession(params: {
   const stripe = getStripe();
   const metadata = buildCheckoutMetadata(params);
   const baseUrl = getBaseUrl();
-  const transferEnabled =
-    params.venue.stripeAccountId &&
-    params.venue.stripeChargesEnabled &&
-    params.venue.stripePayoutsEnabled;
+  const branding = getStripeCheckoutBranding();
+  // For the current launch, collect all checkout revenue into the platform
+  // Stripe account. Venue payout details can be captured separately and settled later.
+  const transferEnabled = false;
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     allow_promotion_codes: true,
+    branding_settings: {
+      display_name: branding.displayName,
+      icon: {
+        type: "file",
+        file: branding.iconFileId,
+      },
+      logo: {
+        type: "file",
+        file: branding.logoFileId,
+      },
+    },
     success_url: `${baseUrl}${getVenueSuccessPath(params.venue.slug)}?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${baseUrl}${getVenuePublicPath(params.venue.slug)}`,
     customer_email: params.input.email,

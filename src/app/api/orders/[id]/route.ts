@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 
 import { getOrderById } from "@/lib/db";
-import { recoverProcessingOrder } from "@/lib/queue";
+import {
+  drainGenerationQueue,
+  ensureCompletedOrderDelivery,
+  recoverProcessingOrder,
+} from "@/lib/queue";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -13,8 +17,17 @@ export async function GET(_request: Request, { params }: Props) {
   const { id } = await params;
   let order = await getOrderById(id);
 
+  if (order?.status === "queued") {
+    await drainGenerationQueue();
+    order = await getOrderById(id);
+  }
+
   if (order?.status === "processing" && order.finetuneGenerationId) {
     order = await recoverProcessingOrder(id);
+  }
+
+  if (order?.status === "completed" && !order.emailedAt) {
+    order = await ensureCompletedOrderDelivery(id);
   }
 
   if (!order) {
@@ -29,6 +42,8 @@ export async function GET(_request: Request, { params }: Props) {
       createdAt: order.createdAt,
       generatedPrompt: order.generatedPrompt,
       songUrl: order.songUrl,
+      slideshowUrl:
+        typeof order.metadata?.slideshowUrl === "string" ? order.metadata.slideshowUrl : null,
       errorMessage: order.errorMessage,
       emailedAt: order.emailedAt,
     },

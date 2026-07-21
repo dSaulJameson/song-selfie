@@ -1,6 +1,7 @@
 import { after, NextResponse } from "next/server";
 import { ZodError } from "zod";
 
+import { applyVenueAudienceRules } from "@/lib/content-policy";
 import {
   createDraftOrder,
   getVenueBySlug,
@@ -17,6 +18,7 @@ type Props = {
 };
 
 export const runtime = "nodejs";
+const FREE_PROMO_CODE = "freesong";
 
 function getCheckoutErrorMessage(error: unknown) {
   if (error instanceof ZodError) {
@@ -44,7 +46,18 @@ export async function POST(request: Request, { params }: Props) {
 
   try {
     const rawInput = (await request.json()) as unknown;
-    const input = songRequestSchema.parse(rawInput);
+    const promoCode =
+      rawInput &&
+      typeof rawInput === "object" &&
+      "promoCode" in rawInput &&
+      typeof rawInput.promoCode === "string"
+        ? rawInput.promoCode.trim().toLowerCase()
+        : "";
+    const parsedInput = songRequestSchema.parse(rawInput);
+    const input = applyVenueAudienceRules(parsedInput, {
+      allowExplicitContent: venue.allowExplicitContent,
+      allowKidsMode: venue.allowKidsMode,
+    });
 
     const draftOrder = await createDraftOrder({
       venueId: venue.id,
@@ -56,17 +69,21 @@ export async function POST(request: Request, { params }: Props) {
       },
     });
 
-    if (venue.priceCents === 0) {
+    if (venue.priceCents === 0 || promoCode === FREE_PROMO_CODE) {
       await markOrderPaidAndQueued({
         orderId: draftOrder.id,
-        checkoutSessionId: `free_${draftOrder.id}`,
+        checkoutSessionId:
+          promoCode === FREE_PROMO_CODE
+            ? `promo_${FREE_PROMO_CODE}_${draftOrder.id}`
+            : `free_${draftOrder.id}`,
         paymentIntentId: null,
         amountTotal: 0,
         currency: "usd",
         metadata: {
           venueName: venue.name,
           venueSlug: venue.slug,
-          checkoutMode: "free",
+          checkoutMode: promoCode === FREE_PROMO_CODE ? "promo-bypass" : "free",
+          promoCode: promoCode || null,
         },
         rawInputs: input,
       });

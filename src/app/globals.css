@@ -1,16 +1,16 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fff7ec;
-  --foreground: #21153b;
-  --surface: #fff2df;
-  --card: #fffdf8;
-  --line: rgba(33, 21, 59, 0.1);
-  --muted-foreground: #65577d;
-  --accent: #ff6b35;
-  --accent-strong: #f6b73c;
-  --accent-soft: rgba(255, 107, 53, 0.12);
-  --cool: #0ea5e9;
+  --background: #09050f;
+  --foreground: #f7f2ff;
+  --surface: rgba(255, 255, 255, 0.05);
+  --card: rgba(16, 12, 24, 0.84);
+  --line: rgba(255, 255, 255, 0.1);
+  --muted-foreground: #c6bdd6;
+  --accent: #ff4fa3;
+  --accent-strong: #8d66ff;
+  --accent-soft: rgba(255, 79, 163, 0.16);
+  --cool: #69d2ff;
 }
 
 @theme inline {
@@ -30,9 +30,10 @@
 
 html {
   background:
-    radial-gradient(circle at top right, rgba(14, 165, 233, 0.12), transparent 28%),
-    radial-gradient(circle at top left, rgba(255, 183, 60, 0.18), transparent 32%),
-    linear-gradient(180deg, #fff9ef, #fff2dd 48%, #fff7ec);
+    radial-gradient(circle at top right, rgba(141, 102, 255, 0.24), transparent 28%),
+    radial-gradient(circle at top left, rgba(255, 79, 163, 0.22), transparent 28%),
+    radial-gradient(circle at bottom, rgba(255, 255, 255, 0.05), transparent 24%),
+    linear-gradient(180deg, #06040b, #12091c 42%, #09050f);
 }
 
 body {

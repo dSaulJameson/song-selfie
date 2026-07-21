@@ -27,13 +27,18 @@ export async function createVenueAction(formData: FormData) {
     contactEmail: formData.get("contactEmail"),
     priceCents: formData.get("priceCents"),
     venueSharePercent: formData.get("venueSharePercent"),
+    allowExplicitContent: formData.get("allowExplicitContent"),
+    allowKidsMode: formData.get("allowKidsMode"),
   });
 
   if (!isSystemVenueSlug(input.slug) && input.priceCents < 100) {
     throw new Error("Real venue pricing must start at $1.00 or higher.");
   }
 
-  const venue = await createVenueRecord(input);
+  const venue = await createVenueRecord({
+    ...input,
+    allowExplicitContent: input.allowKidsMode ? false : input.allowExplicitContent,
+  });
 
   await sendVenueInviteEmail({
     to: venue.contactEmail,
@@ -57,7 +62,7 @@ export async function updateVenueShareAction(formData: FormData) {
   await updateVenueSharePercent(input.venueId, input.venueSharePercent);
   revalidatePath("/admin");
   revalidatePath("/venue");
-  revalidatePath("/stripe-demo");
+  revalidatePath("/generate");
 }
 
 export async function updateVenuePricingAction(formData: FormData) {
@@ -77,7 +82,7 @@ export async function updateVenuePricingAction(formData: FormData) {
   revalidatePath("/admin");
   revalidatePath("/venue");
   revalidatePath("/");
-  revalidatePath("/stripe-demo");
+  revalidatePath("/generate");
   if (venue) {
     revalidatePath(getVenuePublicPath(venue.slug));
   }

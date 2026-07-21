@@ -5,7 +5,12 @@ import QRCode from "qrcode";
 import { requireAdminUser } from "@/lib/auth";
 import { listAllOrders, listAllVenues } from "@/lib/db";
 import { getBaseUrl, getS3Config } from "@/lib/env";
-import { ensureSystemVenues, getVenuePublicPath, isSystemVenueSlug } from "@/lib/system-venues";
+import {
+  ensureSystemVenues,
+  getVenueGeneratePath,
+  getVenuePublicPath,
+  isSystemVenueSlug,
+} from "@/lib/system-venues";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   createVenueAction,
@@ -27,13 +32,15 @@ export default async function AdminPage() {
   const venueCards = await Promise.all(
     venues.map(async (venue) => {
       const publicUrl = `${baseUrl}${getVenuePublicPath(venue.slug)}`;
-      const qrCode = await QRCode.toDataURL(publicUrl, {
+      const generateUrl = `${baseUrl}${getVenueGeneratePath(venue.slug)}`;
+      const qrCode = await QRCode.toDataURL(generateUrl, {
         width: 180,
         margin: 1,
       });
 
       return {
         ...venue,
+        generateUrl,
         publicUrl,
         qrCode,
         isSystemVenue: isSystemVenueSlug(venue.slug),
@@ -149,6 +156,39 @@ export default async function AdminPage() {
                 )}
               </label>
             ))}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex items-start justify-between gap-4 rounded-[1.4rem] border border-[color:var(--color-line)] bg-white px-4 py-3 text-sm">
+                <div>
+                  <span className="font-semibold text-[color:var(--color-foreground)]">
+                    Allow NSFW songs
+                  </span>
+                  <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
+                    Show the dirty toggle on the public page.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  name="allowExplicitContent"
+                  defaultChecked
+                  className="mt-1 h-5 w-5 rounded border-[color:var(--color-line)]"
+                />
+              </label>
+              <label className="flex items-start justify-between gap-4 rounded-[1.4rem] border border-[color:var(--color-line)] bg-white px-4 py-3 text-sm">
+                <div>
+                  <span className="font-semibold text-[color:var(--color-foreground)]">
+                    Forced kids mode
+                  </span>
+                  <p className="mt-1 text-xs text-[color:var(--color-muted-foreground)]">
+                    Force every song for this venue to stay clean and family-friendly.
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  name="allowKidsMode"
+                  className="mt-1 h-5 w-5 rounded border-[color:var(--color-line)]"
+                />
+              </label>
+            </div>
           </div>
           <p className="mt-3 text-xs leading-5 text-[color:var(--color-muted-foreground)]">
             Example: <span className="font-mono">songselfie.com/enzos-barbecue</span>. Real
@@ -180,8 +220,8 @@ export default async function AdminPage() {
               </p>
               <h2 className="mt-3 text-2xl font-black">Links, QR codes, and pricing</h2>
             </div>
-            <Link href="/stripe-demo" className="text-sm font-semibold text-[color:var(--color-accent)]">
-              Open Stripe demo
+            <Link href="/generate" className="text-sm font-semibold text-[color:var(--color-accent)]">
+              Open generation page
             </Link>
           </div>
           <div className="mt-5 space-y-4">
@@ -204,7 +244,7 @@ export default async function AdminPage() {
                         <h3 className="text-xl font-black">{venue.name}</h3>
                         {venue.isSystemVenue ? (
                           <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-700">
-                            System demo
+                            Song Selfie page
                           </span>
                         ) : null}
                       </div>
@@ -218,12 +258,12 @@ export default async function AdminPage() {
                         <span className="font-semibold">Page slug:</span> {venue.slug}
                       </p>
                       <a
-                        href={venue.publicUrl}
+                        href={venue.generateUrl}
                         target="_blank"
                         rel="noreferrer"
                         className="block font-mono text-xs text-[color:var(--color-accent)]"
                       >
-                        {venue.publicUrl}
+                        {venue.generateUrl}
                       </a>
                     </div>
                   </div>

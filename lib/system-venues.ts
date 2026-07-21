@@ -1,38 +1,37 @@
-import { listAllVenues, upsertVenueRecord } from "@/lib/db";
+import { listAllVenues, renameVenueSlugIfAvailable, upsertVenueRecord } from "@/lib/db";
 import { getAdminEmails } from "@/lib/env";
 
-const ROOT_DEMO_SLUG = "song-selfie-demo";
-const STRIPE_DEMO_SLUG = "stripe-demo";
+const LEGACY_STRIPE_DEMO_SLUG = "stripe-demo";
+const DEFAULT_GENERATION_SLUG = "song-selfie";
 
 function getSystemContactEmail() {
   return getAdminEmails()[0] ?? "team@songselfie.com";
 }
 
-export async function ensureRootDemoVenue() {
-  return upsertVenueRecord({
-    name: "Song Selfie Testing",
-    slug: ROOT_DEMO_SLUG,
-    description: "Private free-testing page for internal Song Selfie feedback and QA.",
-    contactEmail: getSystemContactEmail(),
-    priceCents: 0,
-    venueSharePercent: 70,
+export async function ensureDefaultGenerationVenue() {
+  await renameVenueSlugIfAvailable({
+    oldSlug: LEGACY_STRIPE_DEMO_SLUG,
+    newSlug: DEFAULT_GENERATION_SLUG,
+    name: "Song Selfie",
   });
-}
 
-export async function ensureStripeDemoVenue() {
   return upsertVenueRecord({
     name: "Song Selfie",
-    slug: STRIPE_DEMO_SLUG,
+    slug: DEFAULT_GENERATION_SLUG,
     description:
       "Custom songs for tables, birthdays, and moments worth replaying. Secure Stripe checkout before generation starts.",
     contactEmail: getSystemContactEmail(),
-    priceCents: 100,
+    priceCents: 200,
     venueSharePercent: 0,
+    allowExplicitContent: true,
+    allowKidsMode: false,
   });
 }
 
+export const ensureStripeDemoVenue = ensureDefaultGenerationVenue;
+
 export async function ensureSystemVenues() {
-  await Promise.all([ensureRootDemoVenue(), ensureStripeDemoVenue()]);
+  await ensureDefaultGenerationVenue();
 }
 
 export async function getVenueSummaries() {
@@ -41,34 +40,38 @@ export async function getVenueSummaries() {
 }
 
 export function isSystemVenueSlug(slug: string) {
-  return Object.values(SYSTEM_VENUE_SLUGS).includes(slug as (typeof SYSTEM_VENUE_SLUGS)[keyof typeof SYSTEM_VENUE_SLUGS]);
+  return (
+    slug === LEGACY_STRIPE_DEMO_SLUG ||
+    Object.values(SYSTEM_VENUE_SLUGS).includes(
+      slug as (typeof SYSTEM_VENUE_SLUGS)[keyof typeof SYSTEM_VENUE_SLUGS],
+    )
+  );
 }
 
 export function getVenuePublicPath(slug: string) {
-  if (slug === SYSTEM_VENUE_SLUGS.stripeDemo) {
-    return "/";
-  }
-
-  if (slug === SYSTEM_VENUE_SLUGS.rootDemo) {
-    return "/testing";
+  if (slug === SYSTEM_VENUE_SLUGS.defaultGeneration || slug === LEGACY_STRIPE_DEMO_SLUG) {
+    return "/generate";
   }
 
   return `/${slug}`;
 }
 
-export function getVenueSuccessPath(slug: string) {
-  if (slug === SYSTEM_VENUE_SLUGS.stripeDemo) {
-    return "/success";
+export function getVenueGeneratePath(slug: string) {
+  if (slug === SYSTEM_VENUE_SLUGS.defaultGeneration || slug === LEGACY_STRIPE_DEMO_SLUG) {
+    return "/generate";
   }
 
-  if (slug === SYSTEM_VENUE_SLUGS.rootDemo) {
-    return "/testing/success";
+  return `/generate?venue=${encodeURIComponent(slug)}`;
+}
+
+export function getVenueSuccessPath(slug: string) {
+  if (slug === SYSTEM_VENUE_SLUGS.defaultGeneration || slug === LEGACY_STRIPE_DEMO_SLUG) {
+    return "/success";
   }
 
   return `/${slug}/success`;
 }
 
 export const SYSTEM_VENUE_SLUGS = {
-  rootDemo: ROOT_DEMO_SLUG,
-  stripeDemo: STRIPE_DEMO_SLUG,
+  defaultGeneration: DEFAULT_GENERATION_SLUG,
 } as const;

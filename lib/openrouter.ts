@@ -5,8 +5,9 @@ import {
   buildPromptPackage,
   getLyricCharacterBudget,
   getLyricLineBudget,
+  type PhotoStoryContext,
 } from "@/lib/prompt-builder";
-import type { SongRequestInput } from "@/lib/schema";
+import type { SongRequestInput, UploadedPhotoAsset } from "@/lib/schema";
 import { safeJsonParse } from "@/lib/utils";
 
 const openRouterSongPacketSchema = z.object({
@@ -27,8 +28,14 @@ type OpenRouterChatResponse = {
 
 type OpenRouterMessageContent =
   | string
-  | Array<{ type?: string; text?: string }>
+  | Array<{ type?: string; text?: string; image_url?: { url: string } }>
   | undefined;
+
+const photoStorySchema = z.object({
+  summary: z.string().trim().min(1).max(240),
+  details: z.array(z.string().trim().min(1).max(120)).max(8).default([]),
+  lyricIdeas: z.array(z.string().trim().min(1).max(120)).max(6).default([]),
+});
 
 export type GeneratedSongPacket = z.infer<typeof openRouterSongPacketSchema> & {
   naturalPrompt: string;
@@ -102,7 +109,7 @@ function getMessageText(content: OpenRouterMessageContent) {
 
 export function buildFallbackSongPacket(
   input: SongRequestInput,
-  context?: { venueName?: string },
+  context?: { venueName?: string; photoStory?: PhotoStoryContext | null },
 ): GeneratedSongPacket {
   const promptPackage = buildPromptPackage(input, context);
   const lyricCharacterBudget = getLyricCharacterBudget(input.duration);
@@ -136,7 +143,7 @@ export function buildFallbackSongPacket(
 
 export async function generateSongPacket(
   input: SongRequestInput,
-  context?: { venueName?: string },
+  context?: { venueName?: string; photoStory?: PhotoStoryContext | null },
 ): Promise<GeneratedSongPacket> {
   const promptPackage = buildPromptPackage(input, context);
   const config = getOpenRouterConfig();
@@ -215,4 +222,70 @@ export async function generateSongPacket(
     usedFallback: false,
     explicit: promptPackage.explicit,
   };
+}
+
+export async function analyzePhotoStory(
+  assets: UploadedPhotoAsset[],
+  context: {
+    story: string;
+    names: string;
+    venueName?: string;
+  },
+) {
+  if (assets.length === 0) {
+    return null;
+  }
+
+  const config = getOpenRouterConfig();
+  const response = await fetch(`${config.baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.apiKey}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": getBaseUrl(),
+      "X-Title": config.appName,
+    },
+    body: JSON.stringify({
+      model: config.safeModel,
+      temperature: 0.2,
+      max_completion_tokens: 400,
+      response_format: {
+        type: "json_object",
+      },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You summarize user-supplied photos for a songwriting app. Return valid JSON only. The JSON must include summary, details, and lyricIdeas. Describe only visually obvious things. Do not identify real people. Do not invent unseen facts. Keep detail phrases short and concrete.",
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text:
+                `Context for the song: names=${context.names}; story=${context.story || "none provided"}; venue=${context.venueName ?? "unknown"}. ` +
+                "Summarize the photos as scene details that can be woven into song lyrics naturally.",
+            },
+            ...assets.map((asset) => ({
+              type: "image_url",
+              image_url: {
+                url: asset.url,
+              },
+            })),
+          ],
+        },
+      ],
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenRouter photo analysis error (${response.status}): ${await response.text()}`);
+  }
+
+  const payload = (await response.json()) as OpenRouterChatResponse;
+  const content = getMessageText(payload.choices?.[0]?.message?.content);
+  const parsed = extractJsonObject(content);
+  return photoStorySchema.parse(parsed);
 }
