@@ -4,6 +4,8 @@ import { getVenueBySlug, listAllVenues, listRecentCompletedOrdersForVenue } from
 import { ensureSystemVenues, SYSTEM_VENUE_SLUGS } from "@/lib/system-venues";
 import { VenueSongExperience } from "@/src/components/public/venue-song-experience";
 
+export const dynamic = "force-dynamic";
+
 type Props = {
   searchParams: Promise<{ venue?: string | string[] }>;
 };
