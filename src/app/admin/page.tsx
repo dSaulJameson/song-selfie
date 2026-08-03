@@ -17,6 +17,7 @@ import {
   updateVenuePricingAction,
   updateVenueShareAction,
 } from "@/src/app/admin/actions";
+import { SignOutButton } from "@/src/components/auth/email-auth-form";
 
 export default async function AdminPage() {
   const user = await requireAdminUser();
@@ -60,9 +61,10 @@ export default async function AdminPage() {
               Song Selfie venue control
             </h1>
             <p className="mt-2 text-sm leading-6 text-[color:var(--color-muted-foreground)]">
-              Signed in as {user.primaryEmailAddress?.emailAddress}. Create venue pages,
+              Signed in as {user.email}. Create venue pages,
               send invite emails, and manage live pricing and splits.
             </p>
+            <SignOutButton />
           </div>
           <div className="grid gap-3 sm:grid-cols-4">
             <div className="rounded-[1.4rem] bg-[color:var(--color-surface)] px-4 py-3">

@@ -1,25 +1,19 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-import { hasClerkServerKeys } from "@/lib/clerk";
+import { auth, isAdminEmail } from "@/lib/auth";
 import {
   getVenueById,
   saveVenueStripeAccount,
 } from "@/lib/db";
-import { isAdminEmail } from "@/lib/auth";
 import { createConnectOnboardingLink } from "@/lib/stripe";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  if (!hasClerkServerKeys()) {
-    return NextResponse.redirect(new URL("/sign-in", request.url));
-  }
+  const session = await auth.api.getSession({ headers: request.headers });
 
-  const session = await auth();
-
-  if (!session.userId) {
-    return NextResponse.redirect(new URL("/sign-in", request.url));
+  if (!session?.user) {
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   const { searchParams } = new URL(request.url);
@@ -30,10 +24,12 @@ export async function GET(request: Request) {
   }
 
   const venue = await getVenueById(venueId);
-  const user = await currentUser();
-  const email = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
+  const email = session.user.email.toLowerCase();
   const canAccessVenue =
-    !!venue && (venue.ownerClerkUserId === session.userId || isAdminEmail(email));
+    !!venue &&
+    (venue.ownerUserId === session.user.id ||
+      venue.contactEmail.toLowerCase() === email ||
+      isAdminEmail(email));
 
   if (!canAccessVenue) {
     return NextResponse.json({ error: "Venue not found." }, { status: 404 });

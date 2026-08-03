@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
 import { Geist, Geist_Mono } from "next/font/google";
-
-import { hasClerkClientKeys } from "@/lib/clerk";
 
 import "./globals.css";
 
@@ -32,21 +29,13 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const clerkProxyUrl =
-    process.env.NEXT_PUBLIC_CLERK_PROXY_URL || "https://www.songselfie.com/__clerk";
-  const body = hasClerkClientKeys() ? (
-    <ClerkProvider proxyUrl={clerkProxyUrl}>{children}</ClerkProvider>
-  ) : (
-    children
-  );
-
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full`}
     >
       <body className="min-h-full bg-background font-sans text-foreground antialiased">
-        {body}
+        {children}
       </body>
     </html>
   );

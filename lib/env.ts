@@ -110,19 +110,6 @@ export function getS3Config() {
   };
 }
 
-export function getSesConfig() {
-  return {
-    region: requireEnv("SES_REGION", "AWS_REGION"),
-    accessKeyId: requireEnv("SES_ACCESS_KEY", "AWS_ACCESS_KEY_ID"),
-    secretAccessKey: requireEnv("SES_SECRET_KEY", "AWS_SECRET_ACCESS_KEY"),
-    fromEmail: getFirstEnv("SES_FROM_EMAIL", "EMAIL_FROM", "FROM_EMAIL"),
-    configurationSetName: getFirstEnv(
-      "SES_CONFIGURATION_SET",
-      "AWS_SES_CONFIGURATION_SET",
-    ),
-  };
-}
-
 export function getAdminEmails() {
   return (getFirstEnv("ADMIN_EMAILS") ?? "")
     .split(",")

@@ -1,22 +1,5 @@
-import https from "node:https";
-
-import { Hash } from "@smithy/hash-node";
-import { HttpRequest } from "@smithy/protocol-http";
-import { SignatureV4 } from "@smithy/signature-v4";
-
-import { getBaseUrl, getSesConfig } from "@/lib/env";
+import { getBaseUrl } from "@/lib/env";
 import { getVenuePublicPath } from "@/lib/system-venues";
-
-function getSesFromEmail() {
-  const config = getSesConfig();
-  if (!config.fromEmail) {
-    throw new Error(
-      "SES_FROM_EMAIL must be configured with a verified SES sender address.",
-    );
-  }
-
-  return config.fromEmail;
-}
 
 function escapeHtml(value: string) {
   return value
@@ -39,121 +22,84 @@ function getBusinessLeadRecipients() {
     .filter(Boolean))];
 }
 
-async function sendRawSesEmail(params: {
+export async function sendTransactionalEmail(params: {
   to: string;
   subject: string;
   html: string;
   text: string;
 }) {
-  const mailerUrl = process.env.MAILER_WORKER_URL?.trim();
-  const mailerSecret = process.env.MAILER_WORKER_SECRET?.trim();
+  const mailerUrl =
+    process.env.MAILER_WORKER_URL?.trim() ||
+    "https://song-selfie-mailer.dsauljameson.workers.dev";
+  const mailerSecret =
+    process.env.MAILER_WORKER_SECRET?.trim() || process.env.MAILER_SECRET?.trim();
 
-  if (mailerUrl || mailerSecret) {
-    if (!mailerUrl || !mailerSecret) {
-      throw new Error(
-        "MAILER_WORKER_URL and MAILER_WORKER_SECRET must be configured together.",
-      );
-    }
-
-    const response = await fetch(mailerUrl, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${mailerSecret}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(params),
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      throw new Error(`Cloudflare mailer failed with status ${response.status}.`);
-    }
-
-    return;
+  if (!mailerSecret) {
+    throw new Error(
+      "Cloudflare transactional email is not configured. Set MAILER_SECRET.",
+    );
   }
 
-  const config = getSesConfig();
-  const host = `email.${config.region}.amazonaws.com`;
-  const body = new URLSearchParams({
-    Action: "SendEmail",
-    Version: "2010-12-01",
-    Source: getSesFromEmail(),
-    "Destination.ToAddresses.member.1": params.to,
-    "Message.Subject.Charset": "UTF-8",
-    "Message.Subject.Data": params.subject,
-    "Message.Body.Html.Charset": "UTF-8",
-    "Message.Body.Html.Data": params.html,
-    "Message.Body.Text.Charset": "UTF-8",
-    "Message.Body.Text.Data": params.text,
-  });
-
-  if (config.configurationSetName) {
-    body.set("ConfigurationSetName", config.configurationSetName);
-  }
-
-  const signer = new SignatureV4({
-    credentials: {
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-    },
-    region: config.region,
-    service: "ses",
-    sha256: Hash.bind(null, "sha256"),
-  });
-
-  const request = new HttpRequest({
-    protocol: "https:",
-    hostname: host,
+  const response = await fetch(mailerUrl, {
     method: "POST",
-    path: "/",
     headers: {
-      "content-type": "application/x-www-form-urlencoded; charset=utf-8",
-      host,
+      authorization: `Bearer ${mailerSecret}`,
+      "content-type": "application/json",
     },
-    body: body.toString(),
+    body: JSON.stringify(params),
+    cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
   });
 
-  const signedRequest = await signer.sign(request);
-
-  const response = await new Promise<{ statusCode: number; body: string }>(
-    (resolve, reject) => {
-      const outgoing = https.request(
-        {
-          hostname: host,
-          method: signedRequest.method,
-          path: signedRequest.path,
-          headers: signedRequest.headers,
-        },
-        (incoming) => {
-          let responseBody = "";
-          incoming.setEncoding("utf8");
-          incoming.on("data", (chunk) => {
-            responseBody += chunk;
-          });
-          incoming.on("end", () => {
-            resolve({
-              statusCode: incoming.statusCode ?? 500,
-              body: responseBody,
-            });
-          });
-        },
-      );
-
-      outgoing.on("error", reject);
-      outgoing.write(body.toString());
-      outgoing.end();
-    },
-  );
-
-  if (response.statusCode >= 400) {
-    const messageMatch = response.body.match(/<Message>([\s\S]*?)<\/Message>/);
-    const message = messageMatch?.[1]
-      ?.replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&amp;/g, "&");
-
-    throw new Error(message ?? `SES email failed with status ${response.statusCode}.`);
+  if (!response.ok) {
+    throw new Error(`Cloudflare mailer failed with status ${response.status}.`);
   }
+}
+
+export async function sendAuthVerificationEmail(params: {
+  to: string;
+  url: string;
+}) {
+  const safeUrl = escapeHtml(params.url);
+
+  await sendTransactionalEmail({
+    to: params.to,
+    subject: "Verify your Song Selfie email",
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #201733;">
+        <h1 style="margin-bottom: 12px;">Verify your email address</h1>
+        <p>Confirm your email to finish creating your Song Selfie dashboard account.</p>
+        <p><a href="${safeUrl}" style="display: inline-block; padding: 12px 18px; background: #ff4f87; color: white; border-radius: 999px; text-decoration: none;">Verify email</a></p>
+        <p>If you did not request this account, you can ignore this email.</p>
+      </div>
+    `,
+    text:
+      `Verify your Song Selfie email: ${params.url}\n\n` +
+      "If you did not request this account, you can ignore this email.",
+  });
+}
+
+export async function sendAuthPasswordResetEmail(params: {
+  to: string;
+  url: string;
+}) {
+  const safeUrl = escapeHtml(params.url);
+
+  await sendTransactionalEmail({
+    to: params.to,
+    subject: "Reset your Song Selfie password",
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #201733;">
+        <h1 style="margin-bottom: 12px;">Reset your password</h1>
+        <p>Use this secure link to choose a new Song Selfie password.</p>
+        <p><a href="${safeUrl}" style="display: inline-block; padding: 12px 18px; background: #ff4f87; color: white; border-radius: 999px; text-decoration: none;">Reset password</a></p>
+        <p>If you did not request a reset, you can ignore this email.</p>
+      </div>
+    `,
+    text:
+      `Reset your Song Selfie password: ${params.url}\n\n` +
+      "If you did not request a reset, you can ignore this email.",
+  });
 }
 
 export async function sendSongReadyEmails(params: {
@@ -182,7 +128,7 @@ export async function sendSongReadyEmails(params: {
 
   await Promise.all(
     emails.map((email) =>
-      sendRawSesEmail({
+      sendTransactionalEmail({
         to: email.to,
         subject: email.subject,
         html: `
@@ -215,7 +161,7 @@ export async function sendVenueInviteEmail(params: {
   const venueUrl = `${getBaseUrl()}${getVenuePublicPath(params.venueSlug)}`;
   const loginUrl = params.dashboardUrl ?? `${getBaseUrl()}/login`;
 
-  await sendRawSesEmail({
+  await sendTransactionalEmail({
     to: params.to,
     subject: `Song Selfie invite for ${params.venueName}`,
     html: `
@@ -268,7 +214,7 @@ export async function sendBusinessLeadEmail(params: {
 
   await Promise.all(
     recipients.map((to) =>
-      sendRawSesEmail({
+      sendTransactionalEmail({
         to,
         subject: `New Song Selfie venue lead: ${params.businessName?.trim() || params.email}`,
         html: `
@@ -303,7 +249,7 @@ export async function sendForwardedSongEmail(params: {
   title: string;
   sentByEmail: string;
 }) {
-  await sendRawSesEmail({
+  await sendTransactionalEmail({
     to: params.to,
     subject: `${params.venueName} forwarded your Song Selfie track`,
     html: `
@@ -334,7 +280,7 @@ export async function sendVenuePayoutPreferenceEmail(params: {
 
   await Promise.all(
     recipients.map((to) =>
-      sendRawSesEmail({
+      sendTransactionalEmail({
         to,
         subject: `Song Selfie payout request: ${params.venueName}`,
         html: `

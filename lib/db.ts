@@ -9,7 +9,7 @@ export type VenueRecord = {
   name: string;
   slug: string;
   description: string | null;
-  ownerClerkUserId: string;
+  ownerUserId: string;
   contactEmail: string;
   stripeAccountId: string | null;
   stripeChargesEnabled: boolean;
@@ -34,7 +34,7 @@ export type UpsertVenueInput = {
   venueSharePercent: number;
   allowExplicitContent?: boolean;
   allowKidsMode?: boolean;
-  ownerClerkUserId?: string;
+  ownerUserId?: string;
 };
 
 export type SongOrderRecord = {
@@ -135,7 +135,7 @@ function mapVenueColumns() {
     name,
     slug,
     description,
-    owner_clerk_user_id as "ownerClerkUserId",
+    owner_user_id as "ownerUserId",
     contact_email as "contactEmail",
     stripe_account_id as "stripeAccountId",
     stripe_charges_enabled as "stripeChargesEnabled",
@@ -190,7 +190,7 @@ export async function ensureDatabase() {
           name text not null,
           slug text not null unique,
           description text,
-          owner_clerk_user_id text not null,
+          owner_user_id text not null,
           contact_email text not null,
           stripe_account_id text,
           stripe_charges_enabled boolean not null default false,
@@ -286,6 +286,25 @@ export async function ensureDatabase() {
 
         alter table venues
         add column if not exists payout_updated_at timestamptz;
+
+        alter table venues
+        add column if not exists owner_user_id text;
+
+        do $$
+        begin
+          if exists (
+            select 1
+            from information_schema.columns
+            where table_schema = current_schema()
+              and table_name = 'venues'
+              and column_name = 'owner_clerk_user_id'
+          ) then
+            execute 'update venues set owner_user_id = owner_clerk_user_id where owner_user_id is null and owner_clerk_user_id is not null';
+          end if;
+        end $$;
+
+        alter table venues
+        alter column owner_user_id set not null;
       `);
     })();
   }
@@ -293,12 +312,12 @@ export async function ensureDatabase() {
   await databaseReady;
 }
 
-export async function listVenuesByOwner(ownerClerkUserId: string) {
+export async function listVenuesByOwner(ownerUserId: string) {
   await ensureDatabase();
   const sql = getSql();
   return sql.unsafe<VenueRecord[]>(
-    `select ${mapVenueColumns()} from venues where owner_clerk_user_id = $1 order by created_at desc`,
-    [ownerClerkUserId],
+    `select ${mapVenueColumns()} from venues where owner_user_id = $1 order by created_at desc`,
+    [ownerUserId],
   );
 }
 
@@ -383,7 +402,7 @@ export async function createVenueRecord(input: UpsertVenueInput) {
   const id = crypto.randomUUID();
   const normalizedEmail = input.contactEmail.trim().toLowerCase();
   const ownerKey =
-    input.ownerClerkUserId?.trim() || `email:${normalizedEmail}`;
+    input.ownerUserId?.trim() || `email:${normalizedEmail}`;
 
   const rows = await sql.unsafe<VenueRecord[]>(
     `
@@ -392,7 +411,7 @@ export async function createVenueRecord(input: UpsertVenueInput) {
         name,
         slug,
         description,
-        owner_clerk_user_id,
+        owner_user_id,
         contact_email,
         price_cents,
         venue_share_percent,
@@ -459,7 +478,7 @@ export async function upsertVenueRecord(input: UpsertVenueInput) {
   const normalizedSlug = slugify(input.slug || input.name);
   const normalizedEmail = input.contactEmail.trim().toLowerCase();
   const ownerKey =
-    input.ownerClerkUserId?.trim() || `email:${normalizedEmail}`;
+    input.ownerUserId?.trim() || `email:${normalizedEmail}`;
 
   const rows = await sql.unsafe<VenueRecord[]>(
     `
@@ -468,7 +487,7 @@ export async function upsertVenueRecord(input: UpsertVenueInput) {
         name,
         slug,
         description,
-        owner_clerk_user_id,
+        owner_user_id,
         contact_email,
         price_cents,
         venue_share_percent,
@@ -479,7 +498,7 @@ export async function upsertVenueRecord(input: UpsertVenueInput) {
       on conflict (slug) do update
       set name = excluded.name,
           description = excluded.description,
-          owner_clerk_user_id = excluded.owner_clerk_user_id,
+          owner_user_id = excluded.owner_user_id,
           contact_email = excluded.contact_email,
           price_cents = excluded.price_cents,
           venue_share_percent = excluded.venue_share_percent,

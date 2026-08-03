@@ -1,46 +1,47 @@
-import { SignUp } from "@clerk/nextjs";
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 
-import { hasClerkClientKeys } from "@/lib/clerk";
+import { getOptionalSession } from "@/lib/auth";
+import { EmailAuthForm } from "@/src/components/auth/email-auth-form";
 
 type Props = {
+  params: Promise<{ "sign-up"?: string[] }>;
   searchParams: Promise<{
     email?: string;
     venue?: string;
     created?: string;
+    returnTo?: string;
   }>;
 };
 
-export default async function SignUpPage({ searchParams }: Props) {
+function safeReturnPath(value: string | undefined, fallback: string) {
+  return value?.startsWith("/") && !value.startsWith("//") ? value : fallback;
+}
+
+export default async function SignUpPage({ params, searchParams }: Props) {
+  const route = await params;
   const query = await searchParams;
   const email = typeof query.email === "string" ? query.email : "";
   const venueSlug = typeof query.venue === "string" ? query.venue : "";
   const isNewVenue = query.created === "1";
-  const returnPath = venueSlug
+  const venuePath = venueSlug
     ? `/venue?${new URLSearchParams({ venue: venueSlug }).toString()}`
     : "/venue";
-  const signInUrl = `/login?${new URLSearchParams({
+  const returnPath = safeReturnPath(query.returnTo, venuePath);
+  const sharedQuery = new URLSearchParams({
     ...(email ? { email } : {}),
     ...(venueSlug ? { venue: venueSlug } : {}),
     ...(isNewVenue ? { created: "1" } : {}),
-  }).toString()}`;
+    ...(query.returnTo ? { returnTo: returnPath } : {}),
+  });
 
-  if (!hasClerkClientKeys()) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[linear-gradient(180deg,#08040d,#16091f)] px-4 py-10 text-white">
-        <section className="w-full max-w-md rounded-[1.6rem] border border-white/10 bg-white/8 p-6 shadow-[0_18px_50px_rgba(244,63,148,0.16)]">
-          <p className="text-xs font-black uppercase tracking-[0.24em] text-pink-300">
-            Auth setup needed
-          </p>
-          <h1 className="mt-3 text-3xl font-black">Clerk is not configured here yet.</h1>
-        </section>
-      </main>
-    );
+  if (route["sign-up"]?.length) {
+    redirect(`/sign-up?${sharedQuery.toString()}`);
   }
 
-  const session = await auth();
-  if (session.userId) {
+  const signInUrl = `/login?${sharedQuery.toString()}`;
+  const session = await getOptionalSession();
+
+  if (session?.user) {
     redirect(returnPath);
   }
 
@@ -60,13 +61,11 @@ export default async function SignUpPage({ searchParams }: Props) {
           </section>
         ) : null}
 
-        <SignUp
-          path="/sign-up"
-          routing="path"
-          signInUrl={signInUrl}
-          fallbackRedirectUrl={returnPath}
-          forceRedirectUrl={returnPath}
-          initialValues={email ? { emailAddress: email } : undefined}
+        <EmailAuthForm
+          mode="sign-up"
+          initialEmail={email}
+          returnPath={returnPath}
+          alternateUrl={signInUrl}
         />
       </div>
     </main>

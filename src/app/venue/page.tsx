@@ -1,8 +1,7 @@
 import Image from "next/image";
-import { auth, currentUser } from "@clerk/nextjs/server";
 import QRCode from "qrcode";
 
-import { getUserEmail, isAdminEmail } from "@/lib/auth";
+import { getOptionalSession, getUserEmail, isAdminEmail } from "@/lib/auth";
 import {
   type VenueRecord,
   type SongOrderRecord,
@@ -144,8 +143,8 @@ export default async function VenuePage({ searchParams }: VenuePageProps) {
   const queryEmail = typeof query.email === "string" ? query.email.trim().toLowerCase() : "";
   const queryVenueSlug = typeof query.venue === "string" ? query.venue.trim() : "";
   const isClaimPreviewRequest = query.created === "1" && Boolean(queryEmail && queryVenueSlug);
-  const session = await auth();
-  const signedInUser = session.userId ? await currentUser() : null;
+  const session = await getOptionalSession();
+  const signedInUser = session?.user ?? null;
   const signedInEmail = signedInUser ? getUserEmail(signedInUser) : "";
   const actorEmail = signedInEmail || queryEmail;
   const actorIsAdmin = signedInEmail ? isAdminEmail(signedInEmail) : false;
