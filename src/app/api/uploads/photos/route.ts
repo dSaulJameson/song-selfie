@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { cleanupTemporaryMedia, uploadPhotoToS3 } from "@/lib/s3";
+import { cleanupTemporaryMedia, uploadPhoto } from "@/lib/object-storage";
 import type { UploadedPhotoAsset } from "@/lib/schema";
 
 const MAX_FILES = 5;
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     const batchId = crypto.randomUUID();
     const assets = await Promise.all(
       files.map(async (file) => {
-        const upload = await uploadPhotoToS3({
+        const upload = await uploadPhoto({
           batchId,
           fileName: file.name || "photo.jpg",
           contentType: file.type,

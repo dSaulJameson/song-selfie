@@ -4,7 +4,8 @@ import QRCode from "qrcode";
 
 import { requireAdminUser } from "@/lib/auth";
 import { listAllOrders, listAllVenues } from "@/lib/db";
-import { getBaseUrl, getS3Config } from "@/lib/env";
+import { getBaseUrl } from "@/lib/env";
+import { hasObjectStorage } from "@/lib/object-storage";
 import {
   ensureSystemVenues,
   getVenueGeneratePath,
@@ -28,7 +29,7 @@ export default async function AdminPage() {
   const totalRevenue = orders.reduce((sum, order) => sum + (order.amountTotal ?? 0), 0);
   const completedSongs = orders.filter((order) => order.status === "completed" && order.songUrl);
   const baseUrl = getBaseUrl();
-  const hasS3Bucket = Boolean(getS3Config().bucket);
+  const hasMediaStorage = hasObjectStorage();
 
   const venueCards = await Promise.all(
     venues.map(async (venue) => {
@@ -95,15 +96,15 @@ export default async function AdminPage() {
         </div>
       </section>
 
-      {!hasS3Bucket ? (
+      {!hasMediaStorage ? (
         <section className="rounded-[1.8rem] border border-amber-200 bg-amber-50/90 p-5 shadow-[0_12px_30px_rgba(120,53,15,0.08)]">
           <p className="text-xs font-bold uppercase tracking-[0.22em] text-amber-700">
             Storage setup needed
           </p>
           <p className="mt-2 text-sm leading-6 text-amber-900">
-            S3 bucket settings are not configured yet, so completed songs may still fall back
-            to provider-hosted audio links. Once you add the bucket, Song Selfie can white-label
-            every playback link.
+            Cloudflare R2 media storage is not configured yet, so completed songs may still fall
+            back to provider-hosted audio links. Once the private gateway is configured, Song
+            Selfie can white-label every playback link.
           </p>
         </section>
       ) : null}

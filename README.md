@@ -37,3 +37,9 @@ shared Cloudflare Tunnel. Pushes to `main` deploy through
 
 Runtime secrets live only in `/opt/song-selfie/.env.production` on HostHatch. They
 must not be added to the repository or deployment archive.
+
+Media is stored in the private Cloudflare R2 bucket `song-selfie-production`.
+HostHatch uploads through the authenticated `song-selfie-media` Worker; the
+Cloudflare account credential and R2 bucket credentials are never present in the
+application runtime. Completed songs remain shareable through the Worker's
+read-only object URLs.

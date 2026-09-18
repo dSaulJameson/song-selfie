@@ -27,9 +27,9 @@ import { buildPromptPackage } from "@/lib/prompt-builder";
 import { songRequestSchema } from "@/lib/schema";
 import {
   cleanupTemporaryMedia,
-  uploadSlideshowToS3,
-  uploadSongToS3,
-} from "@/lib/s3";
+  uploadSlideshow,
+  uploadSong,
+} from "@/lib/object-storage";
 import { sendSongReadyEmails } from "@/lib/ses";
 import { createSongSlideshow } from "@/lib/slideshow";
 
@@ -130,20 +130,20 @@ async function finalizeCompletedOrder(orderId: string) {
 
   const audioBuffer = Buffer.from(await audioResponse.arrayBuffer());
   let songUrl = audioUrl;
-  let s3Key = "";
+  let objectKey = "";
   let slideshowUrl: string | null = null;
   let slideshowKey: string | null = null;
 
   try {
-    const upload = await uploadSongToS3({
+    const upload = await uploadSong({
       buffer: audioBuffer,
       orderId,
       venueSlug: venue.slug,
     });
     songUrl = upload.publicUrl;
-    s3Key = upload.key;
+    objectKey = upload.key;
   } catch {
-    // Fall back to the provider-hosted audio URL when S3 is not configured.
+    // Fall back to the provider-hosted audio URL when R2 is unavailable.
   }
 
   if (input.photoAssets.length > 0) {
@@ -154,7 +154,7 @@ async function finalizeCompletedOrder(orderId: string) {
         audioBuffer,
         photoAssets: input.photoAssets,
       });
-      const upload = await uploadSlideshowToS3({
+      const upload = await uploadSlideshow({
         buffer: slideshowBuffer,
         orderId,
         venueSlug: venue.slug,
@@ -177,7 +177,7 @@ async function finalizeCompletedOrder(orderId: string) {
   await completeOrder({
     orderId,
     songUrl,
-    s3Key,
+    objectKey,
     finetuneResponse: generation as Record<string, unknown>,
   });
 

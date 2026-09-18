@@ -53,7 +53,7 @@ export type SongOrderRecord = {
   finetuneResponse: Record<string, unknown> | null;
   metadata: Record<string, unknown> | null;
   songUrl: string | null;
-  s3Key: string | null;
+  objectKey: string | null;
   errorMessage: string | null;
   createdAt: string;
   updatedAt: string;
@@ -171,7 +171,7 @@ function mapOrderColumns(tableAlias?: string) {
     ${prefix}finetune_response as "finetuneResponse",
     ${prefix}metadata,
     ${prefix}song_url as "songUrl",
-    ${prefix}s3_key as "s3Key",
+    ${prefix}s3_key as "objectKey",
     ${prefix}error_message as "errorMessage",
     ${prefix}created_at as "createdAt",
     ${prefix}updated_at as "updatedAt",
@@ -867,7 +867,7 @@ export async function updateOrderGenerationState(params: {
 export async function completeOrder(params: {
   orderId: string;
   songUrl: string;
-  s3Key: string;
+  objectKey: string;
   finetuneResponse: Record<string, unknown>;
 }) {
   await ensureDatabase();
@@ -886,7 +886,7 @@ export async function completeOrder(params: {
     [
       params.orderId,
       params.songUrl,
-      params.s3Key,
+      params.objectKey,
       JSON.stringify(params.finetuneResponse),
     ],
   );
@@ -970,7 +970,7 @@ export async function listRecentCompletedOrdersForVenue(venueId: string, limit =
   return normalizeOrderRecords(rows);
 }
 
-export async function listRecentCompletedS3Orders(limit = 10) {
+export async function listRecentCompletedStoredOrders(limit = 10) {
   await ensureDatabase();
   const sql = getSql();
   const rows = await sql.unsafe<SongOrderRecord[]>(
