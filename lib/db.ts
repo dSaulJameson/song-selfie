@@ -300,6 +300,7 @@ export async function ensureDatabase() {
               and column_name = 'owner_clerk_user_id'
           ) then
             execute 'update venues set owner_user_id = owner_clerk_user_id where owner_user_id is null and owner_clerk_user_id is not null';
+            execute 'alter table venues alter column owner_clerk_user_id drop not null';
           end if;
         end $$;
 

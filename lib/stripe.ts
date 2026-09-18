@@ -96,6 +96,7 @@ export async function createVenueCheckoutSession(params: {
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
+    integration_identifier: "song_selfie_xkpmvrau",
     allow_promotion_codes: true,
     branding_settings: {
       display_name: branding.displayName,
