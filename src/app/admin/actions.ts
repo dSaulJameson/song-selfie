@@ -9,7 +9,7 @@ import {
   updateVenuePrice,
   updateVenueSharePercent,
 } from "@/lib/db";
-import { sendVenueInviteEmail } from "@/lib/ses";
+import { sendVenueInviteEmail } from "@/lib/mailer";
 import {
   createVenueSchema,
   updateVenuePricingSchema,

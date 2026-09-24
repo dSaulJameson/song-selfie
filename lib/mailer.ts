@@ -31,12 +31,11 @@ export async function sendTransactionalEmail(params: {
   const mailerUrl =
     process.env.MAILER_WORKER_URL?.trim() ||
     "https://song-selfie-mailer.dsauljameson.workers.dev";
-  const mailerSecret =
-    process.env.MAILER_WORKER_SECRET?.trim() || process.env.MAILER_SECRET?.trim();
+  const mailerSecret = process.env.MAILER_WORKER_SECRET?.trim();
 
   if (!mailerSecret) {
     throw new Error(
-      "Cloudflare transactional email is not configured. Set MAILER_SECRET.",
+      "Cloudflare transactional email is not configured. Set MAILER_WORKER_SECRET.",
     );
   }
 
@@ -52,7 +51,12 @@ export async function sendTransactionalEmail(params: {
   });
 
   if (!response.ok) {
-    throw new Error(`Cloudflare mailer failed with status ${response.status}.`);
+    const failure = (await response.json().catch(() => null)) as
+      | { error?: string }
+      | null;
+    throw new Error(
+      failure?.error || `Cloudflare mailer failed with status ${response.status}.`,
+    );
   }
 }
 

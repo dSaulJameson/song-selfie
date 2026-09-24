@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { createSelfServeVenueRecord } from "@/lib/db";
 import { getBaseUrl } from "@/lib/env";
-import { sendBusinessLeadEmail, sendVenueInviteEmail } from "@/lib/ses";
+import { sendBusinessLeadEmail, sendVenueInviteEmail } from "@/lib/mailer";
 import { getVenuePublicPath } from "@/lib/system-venues";
 
 const businessLeadSchema = z.object({

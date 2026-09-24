@@ -989,6 +989,30 @@ export async function listRecentCompletedStoredOrders(limit = 10) {
   return normalizeOrderRecords(rows);
 }
 
+export async function listCompletedSongsInWindow(
+  startAt: string,
+  endAt: string,
+  limit = 500,
+) {
+  await ensureDatabase();
+  const sql = getSql();
+  const rows = await sql.unsafe<SongOrderRecord[]>(
+    `
+      select ${mapOrderColumns()}
+      from song_orders
+      where status = 'completed'
+        and song_url is not null
+        and completed_at >= $1::timestamptz
+        and completed_at < $2::timestamptz
+      order by completed_at desc, updated_at desc
+      limit $3
+    `,
+    [startAt, endAt, Math.max(1, Math.min(limit, 1000))],
+  );
+
+  return normalizeOrderRecords(rows);
+}
+
 export async function listAllOrders(limit = 50) {
   await ensureDatabase();
   const sql = getSql();

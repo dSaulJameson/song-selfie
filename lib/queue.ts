@@ -30,7 +30,7 @@ import {
   uploadSlideshow,
   uploadSong,
 } from "@/lib/object-storage";
-import { sendSongReadyEmails } from "@/lib/ses";
+import { sendSongReadyEmails } from "@/lib/mailer";
 import { createSongSlideshow } from "@/lib/slideshow";
 
 const QUEUE_LOCK_ID = 41022;
@@ -84,7 +84,7 @@ async function finalizeCompletedOrder(orderId: string) {
     } catch (error) {
       console.error("Song email delivery failed", {
         orderId,
-        message: error instanceof Error ? error.message : "Unknown SES error",
+        message: error instanceof Error ? error.message : "Unknown Cloudflare mailer error",
       });
       return getOrderById(orderId);
     }
@@ -186,7 +186,7 @@ async function finalizeCompletedOrder(orderId: string) {
   } catch (error) {
     console.error("Song email delivery failed", {
       orderId,
-      message: error instanceof Error ? error.message : "Unknown SES error",
+      message: error instanceof Error ? error.message : "Unknown Cloudflare mailer error",
     });
   }
 
@@ -227,7 +227,10 @@ async function sweepQueueBacklog() {
       } catch (error) {
         console.error("Missed completion email recovery failed", {
           orderId: order.id,
-          message: error instanceof Error ? error.message : "Unknown SES recovery error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Unknown Cloudflare mailer recovery error",
         });
       }
     }),
@@ -341,7 +344,10 @@ export async function ensureCompletedOrderDelivery(orderId: string) {
   } catch (error) {
     console.error("Completion email recovery failed", {
       orderId,
-      message: error instanceof Error ? error.message : "Unknown SES recovery error",
+      message:
+        error instanceof Error
+          ? error.message
+          : "Unknown Cloudflare mailer recovery error",
     });
     return getOrderById(orderId);
   }

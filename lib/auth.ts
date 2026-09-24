@@ -10,7 +10,7 @@ import { getAdminEmails, getBaseUrl, getDatabaseUrl } from "@/lib/env";
 import {
   sendAuthPasswordResetEmail,
   sendAuthVerificationEmail,
-} from "@/lib/ses";
+} from "@/lib/mailer";
 
 const globalForAuth = globalThis as typeof globalThis & {
   songSelfieAuthPool?: Pool;

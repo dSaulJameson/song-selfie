@@ -13,7 +13,7 @@ import {
 import {
   sendForwardedSongEmail,
   sendVenuePayoutPreferenceEmail,
-} from "@/lib/ses";
+} from "@/lib/mailer";
 import {
   updateVenueContentSettingsSchema,
   updateVenuePayoutSchema,
