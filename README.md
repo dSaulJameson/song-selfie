@@ -7,6 +7,10 @@ First, run the development server:
 ```bash
 npm run dev
 # or
+
+<!-- BEGIN:hosthatch-deployment-notice -->
+> **Current production:** K3s namespace `song-selfie` on the new HostHatch VPS. Use [the production deployment guide](docs/production-deployment.md) for the supported Lasso release command and public source-revision check. The old Docker/Compose deployment instructions below are historical.
+<!-- END:hosthatch-deployment-notice -->
 yarn dev
 # or
 pnpm dev
@@ -31,12 +35,11 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 
 ## Production deployment
 
-Production runs as a standalone Next.js container on HostHatch behind Caddy and the
-shared Cloudflare Tunnel. Pushes to `main` deploy through
-`.github/workflows/deploy-hosthatch.yml` after type checking and a production build.
-
-Runtime secrets live only in `/opt/song-selfie/.env.production` on HostHatch. They
-must not be added to the repository or deployment archive.
+Production runs in the `song-selfie` K3s namespace behind the new VPS's
+Caddy and Cloudflare tunnel. Pushes to `main` publish a GHCR image; the
+[Lasso release command](docs/production-deployment.md) promotes it and
+verifies the source SHA through `www.songselfie.com`. Runtime secrets are
+K3s Secrets and must never be added to the repository or image.
 
 Media is stored in the private Cloudflare R2 bucket `song-selfie-production`.
 HostHatch uploads through the authenticated `song-selfie-media` Worker; the
