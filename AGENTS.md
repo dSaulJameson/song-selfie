@@ -22,3 +22,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - Do not run the historical Docker/Compose deploy scripts or restart old VPS
   timers and workers. Review database and external side effects separately.
 <!-- END:hosthatch-production -->
+
+## Security release checks
+
+The protected release scans incoming source for credentials and the exact immutable
+runtime image for vulnerabilities. A fixable critical finding blocks production
+promotion. High and unfixed findings are retained as private Actions artifacts
+for review. Keep these gates and the public source-revision checks enabled.
+Security changes follow the same production workflow; Lasso needs no root key.

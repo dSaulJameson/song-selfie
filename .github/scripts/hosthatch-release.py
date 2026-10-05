@@ -5,6 +5,7 @@ The source Actions job needs only a fine-grained token with Actions read/write
 on the personal hosthatch-ops repository. It holds no SSH or K3s credential.
 """
 
+import http.client
 import json
 import os
 import re
@@ -43,6 +44,12 @@ def request_json(url, token, payload=None):
         except urllib.error.HTTPError as error:
             if error.code not in (502, 503, 504) or attempt == 4:
                 raise RuntimeError(f"GitHub API HTTP {error.code} for {url}") from error
+            time.sleep(2 ** attempt)
+        except (http.client.HTTPException, urllib.error.URLError, TimeoutError) as error:
+            # Listing/polling is read-only. A truncated GitHub response is
+            # transient and must not turn a successful release red.
+            if body is not None or attempt == 4:
+                raise RuntimeError(f"GitHub API transport error for {url}") from error
             time.sleep(2 ** attempt)
     raise AssertionError("unreachable")
 

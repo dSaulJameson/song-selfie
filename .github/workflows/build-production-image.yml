@@ -30,6 +30,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '24'
+      - name: Check incoming source for credentials
+        run: python3 .github/scripts/security-check.py source
       - name: Run application checks
         run: |
           npm ci
@@ -86,6 +88,18 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+      - name: Scan the exact runtime image before production promotion
+        env:
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/scripts/security-check.py image '${{ matrix.image }}@${{ steps.image.outputs.digest }}'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: security-${{ matrix.component }}
+          path: security-reports/
+          if-no-files-found: warn
+          retention-days: 30
       - name: Save release metadata
         env:
           RELEASE_COMPONENT: ${{ matrix.component }}
