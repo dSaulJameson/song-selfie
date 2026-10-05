@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import tarfile
@@ -34,14 +35,31 @@ def tool(name):
     return str(directory/name)
 
 
+def source_range():
+    # A shallow boundary is not a real root commit and produces a false whole-tree diff.
+    shallow=subprocess.run(['git','rev-parse','--is-shallow-repository'],capture_output=True,text=True,check=True).stdout.strip()
+    if shallow!='false': raise ValueError('Source gate requires full history for the incoming push range')
+    head=subprocess.run(['git','rev-parse','HEAD'],capture_output=True,text=True,check=True).stdout.strip()
+    expected=os.environ.get('GITHUB_SHA',head)
+    if head!=expected: raise ValueError('Source checkout does not match the workflow revision')
+    if os.environ.get('GITHUB_EVENT_NAME')!='push': return '-1'
+    event=json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
+    before,after=event.get('before',''),event.get('after','')
+    if not re.fullmatch('[0-9a-f]{40}',before) or after!=head: raise ValueError('Invalid source push range')
+    if before=='0'*40: return after
+    subprocess.run(['git','cat-file','-e',before+'^{commit}'],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    return before+'..'+after
+
+
 def main():
     parser=argparse.ArgumentParser();parser.add_argument('mode',choices=['source','image']);parser.add_argument('image',nargs='?');args=parser.parse_args()
     reports=Path('security-reports');reports.mkdir(exist_ok=True)
     if args.mode=='source':
-        # Check the incoming commit; full existing history has a separately recorded audit.
+        # Check every incoming push commit; existing history has a separately recorded audit.
         config=reports/'gitleaks.toml';config.write_text('title="Independent source gate"\n[extend]\nuseDefault=true\n')
         ignore=reports/'empty.ignore';ignore.write_text('')
-        command=[tool('gitleaks'),'git','.', '--log-opts=-1','--redact=100','--no-banner',
+        revision_range=source_range()
+        command=[tool('gitleaks'),'git','.', '--log-opts='+revision_range,'--redact=100','--no-banner',
                  '--ignore-gitleaks-allow','--config',str(config),'--gitleaks-ignore-path',str(ignore),
                  '--report-format','json','--report-path',str(reports/'secrets.json')]
         raise SystemExit(subprocess.run(command).returncode)
