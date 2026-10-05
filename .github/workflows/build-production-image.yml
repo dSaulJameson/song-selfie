@@ -79,6 +79,7 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
+          pull: true
           tags: ${{ matrix.image }}:sha-${{ github.sha }}
           build-args: |
             SOURCE_REVISION=${{ github.sha }}

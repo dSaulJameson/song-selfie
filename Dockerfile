@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
 FROM node:24-bookworm-slim AS dependencies
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+RUN npm install --global npm@11.21.0
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -15,6 +17,8 @@ COPY . .
 RUN npm run build
 
 FROM node:24-bookworm-slim AS runner
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+RUN npm install --global npm@11.21.0
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     HOSTNAME=0.0.0.0 \
